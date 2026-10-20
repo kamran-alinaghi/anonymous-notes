@@ -1,20 +1,18 @@
-import Fastify from "fastify";
-import websocket from "@fastify/websocket";
-
-const app = Fastify({ logger: true });
+import { buildApp } from "./app.js";
+import { env } from "./config/env.js";
 
 async function start() {
-  await app.register(websocket);
+  const app = await buildApp();
 
-  app.get("/", async () => {
-    return { message: "Anonymous Note server is running!" };
-  });
-
-  app.get("/ws", { websocket: true }, (socket) => {
-    socket.send("Connected to Anonymous Note server!");
-  });
-
-  await app.listen({ port: 3000, host: "127.0.0.1" });
+  try {
+    await app.listen({
+      host: env.host,
+      port: env.port,
+    });
+  } catch (error) {
+    app.log.error(error);
+    process.exit(1);
+  }
 }
 
 start();
