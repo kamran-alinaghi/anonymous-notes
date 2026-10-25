@@ -496,7 +496,6 @@ export class WebSocketTransport {
     }
     this.trySend(socket, { type: "GAME_STARTED", requestId, room: gameRoomView(result.value) });
     this.broadcastGameState(result.value);
-    this.broadcastConnectionState(result.value);
   }
 
   private handleSetSubject(
@@ -521,7 +520,6 @@ export class WebSocketTransport {
     }
     this.trySend(socket, { type: "SUBJECT_SUBMITTED", requestId, room: gameRoomView(result.value) });
     this.broadcastGameState(result.value);
-    this.broadcastConnectionState(result.value);
   }
 
   private broadcastGameState(room: Room): void {
@@ -670,7 +668,6 @@ export class WebSocketTransport {
         : { type: "NEXT_ROUND_STARTED" as const, requestId, room };
     this.trySend(socket, response);
     this.broadcastGameState(result.value);
-    this.broadcastConnectionState(result.value);
   }
 
   /** Every connection gets a viewer-specific projection; private contents are never room-broadcast. */
