@@ -1,6 +1,6 @@
-import type { RevealMode } from "../domain/types.js";
+import type { GamePhase, RevealMode } from "../domain/types.js";
 
-export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS"] as const;
+export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT"] as const;
 export type IncomingMessageType = (typeof INCOMING_MESSAGE_TYPES)[number];
 
 export interface CreateRoomRequest {
@@ -23,12 +23,28 @@ export interface ReorderPlayersRequest {
   playerIds: string[];
 }
 
-export type IncomingMessage = CreateRoomRequest | JoinRoomRequest | ReorderPlayersRequest;
+export interface StartGameRequest {
+  type: "START_GAME";
+  requestId: string;
+}
+
+export interface SetSubjectRequest {
+  type: "SET_SUBJECT";
+  requestId: string;
+  subject: string;
+}
+
+export type IncomingMessage =
+  | CreateRoomRequest
+  | JoinRoomRequest
+  | ReorderPlayersRequest
+  | StartGameRequest
+  | SetSubjectRequest;
 
 export interface HostLobbyRoomView {
   roomCode: string;
   revealMode: RevealMode;
-  phase: string;
+  phase: GamePhase;
   hostNickname: string;
   playerCount: number;
   players: Array<{ id: string; nickname: string }>;
@@ -46,12 +62,26 @@ export interface PlayerLobbyRoomView {
 
 export type PublicRoomView = HostLobbyRoomView | PlayerLobbyRoomView;
 
+export interface GameRoomView {
+  roomCode: string;
+  revealMode: RevealMode;
+  phase: GamePhase;
+  hostNickname: string;
+  playerCount: number;
+  currentRoundNumber: number;
+  currentSubjectSetterNickname: string | null;
+  subject: string | null;
+}
+
 export type OutgoingMessage =
   | { type: "CONNECTED"; connectionId: string }
   | { type: "ROOM_CREATED"; requestId: string; room: PublicRoomView; sessionRole: "HOST" | "PLAYER"; nickname: string }
   | { type: "ROOM_JOINED"; requestId: string; room: PublicRoomView; sessionRole: "PLAYER"; nickname: string }
   | { type: "LOBBY_UPDATED"; room: PublicRoomView }
   | { type: "PLAYER_ORDER_UPDATED"; requestId: string; room: HostLobbyRoomView }
+  | { type: "GAME_STARTED"; requestId: string; room: GameRoomView }
+  | { type: "SUBJECT_SUBMITTED"; requestId: string; room: GameRoomView }
+  | { type: "GAME_STATE_UPDATED"; room: GameRoomView }
   | { type: "ERROR"; requestId?: string; error: { code: string; message: string } };
 
 export type MessageParseResult =
@@ -126,4 +156,13 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
     requestId,
     playerIds: value.playerIds as string[],
   } };
+
+  if (value.type === "START_GAME") {
+    return { ok: true, message: { type: "START_GAME", requestId } };
+  }
+
+  if (typeof value.subject !== "string" || value.subject.length > 10_000) {
+    return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "SET_SUBJECT requires subject text." };
+  }
+  return { ok: true, message: { type: "SET_SUBJECT", requestId, subject: value.subject } };
 }
