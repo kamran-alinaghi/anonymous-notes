@@ -247,7 +247,10 @@ export class WebSocketClient {
       this.ready = true;
       this.reconnectAttempt = 0;
       this.updateState({ status: "connected", sessionStatus: "restored", reconnectAttempt: 0, lastError: null });
-      if (restored.room.phase === "REVEALING") {
+      if (
+        restored.room.phase === "REVEALING" &&
+        (restored.room.revealMode === "INDIVIDUAL_DEVICES" || restored.sessionRole === "HOST")
+      ) {
         void this.request({ type: "GET_REVEAL_STATE" }).catch(() => {
           this.updateState({ lastError: "Could not refresh the current reveal state." });
         });
