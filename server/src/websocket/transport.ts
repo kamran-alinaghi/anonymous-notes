@@ -1,4 +1,7 @@
+import { randomBytes } from "node:crypto";
+
 import type { Room } from "../domain/types.js";
+import type { ConnectionLifecycleService } from "../game/connection-lifecycle.js";
 import type { GameManagementService } from "../game/game-management.js";
 import type { RoundLifecycleService } from "../game/round-lifecycle.js";
 import type { LobbyManagementService } from "../lobby/lobby-management.js";
@@ -13,6 +16,9 @@ import {
   type SubmissionProgressView,
 } from "./contracts.js";
 import { ConnectionSessions, type ConnectionSession, type SessionConnection } from "./sessions.js";
+
+type ReconnectIdentity = Omit<ConnectionSession, "connectionId">;
+type ActiveIdentityConnection = { socket: SessionConnection; session: ConnectionSession };
 
 function publicRoomView(room: Room, isHost: boolean): PublicRoomView {
   const common = {
@@ -78,6 +84,10 @@ function safeError(code: string, message: string, requestId?: string): OutgoingM
 /** Transport coordinator; business rules remain in application services. */
 export class WebSocketTransport {
   readonly sessions: ConnectionSessions;
+  private readonly reconnectCredentials = new Map<string, ReconnectIdentity>();
+  private readonly credentialByIdentity = new Map<string, string>();
+  private readonly activeByIdentity = new Map<string, ActiveIdentityConnection>();
+  private readonly generateSessionToken: () => string;
 
   constructor(
     private readonly roomManagement: RoomManagementService,
@@ -87,8 +97,11 @@ export class WebSocketTransport {
     private readonly noteSubmission?: NoteSubmissionService,
     private readonly revealSession?: RevealSessionService,
     private readonly roundLifecycle?: RoundLifecycleService,
+    private readonly connectionLifecycle?: ConnectionLifecycleService,
+    generateSessionToken: () => string = () => randomBytes(32).toString("hex"),
   ) {
     this.sessions = new ConnectionSessions(generateConnectionId);
+    this.generateSessionToken = generateSessionToken;
   }
 
   attach(socket: SessionConnection): void {
@@ -103,8 +116,8 @@ export class WebSocketTransport {
     socket.on("message", (data) => {
       void this.handleMessage(socket, data);
     });
-    socket.on("close", () => this.sessions.unregister(socket));
-    socket.on("error", () => this.sessions.unregister(socket));
+    socket.on("close", () => this.handleDisconnect(socket));
+    socket.on("error", () => this.handleDisconnect(socket));
   }
 
   private send(socket: SessionConnection, message: OutgoingMessage): void {
@@ -122,6 +135,11 @@ export class WebSocketTransport {
       const parsed = parseIncomingMessage(data);
       if (!parsed.ok) {
         this.trySend(socket, safeError(parsed.code, parsed.message, parsed.requestId));
+        return;
+      }
+
+      if (parsed.message.type === "RECONNECT") {
+        this.handleReconnect(socket, session, parsed.message.requestId, parsed.message.sessionToken);
         return;
       }
 
@@ -149,7 +167,7 @@ export class WebSocketTransport {
         this.handleNavigateReveal(socket, session, parsed.message.requestId, parsed.message.action);
         return;
       }
-      if (parsed.message.type === "COMPLETE_ROUND" || parsed.message.type === "FINISH_GAME" || parsed.message.type === "START_NEXT_ROUND") {
+      if (parsed.message.type === "COMPLETE_ROUND" || parsed.message.type === "FINISH_GAME" || parsed.message.type === "START_NEXT_ROUND" || parsed.message.type === "TERMINATE_GAME") {
         this.handleRoundLifecycle(socket, session, parsed.message.requestId, parsed.message.type);
         return;
       }
@@ -175,7 +193,7 @@ export class WebSocketTransport {
 
         const room = result.value;
         const playerId = room.revealMode === "INDIVIDUAL_DEVICES" ? room.host.id : null;
-        const bound = this.sessions.bind(session, {
+        const sessionToken = this.bindIdentity(socket, session, {
           role: "HOST",
           roomCode: room.code,
           roomId: room.id,
@@ -183,7 +201,7 @@ export class WebSocketTransport {
           hostId: room.host.id,
           nickname: room.host.nickname,
         });
-        if (!bound) {
+        if (!sessionToken) {
           this.trySend(socket, safeError("SESSION_BIND_FAILED", "Could not establish this connection's identity.", parsed.message.requestId));
           return;
         }
@@ -194,6 +212,7 @@ export class WebSocketTransport {
           room: publicRoomView(room, true),
           sessionRole: "HOST",
           nickname: room.host.nickname,
+          sessionToken,
         });
         return;
       }
@@ -208,7 +227,7 @@ export class WebSocketTransport {
       }
 
       const { room, player } = result.value;
-      const bound = this.sessions.bind(session, {
+      const sessionToken = this.bindIdentity(socket, session, {
         role: "PLAYER",
         roomCode: room.code,
         roomId: room.id,
@@ -216,7 +235,7 @@ export class WebSocketTransport {
         hostId: null,
         nickname: player.nickname,
       });
-      if (!bound) {
+      if (!sessionToken) {
         this.trySend(socket, safeError("SESSION_BIND_FAILED", "Could not establish this connection's identity.", parsed.message.requestId));
         return;
       }
@@ -227,6 +246,7 @@ export class WebSocketTransport {
         room: publicRoomView(room, false),
         sessionRole: "PLAYER",
         nickname: player.nickname,
+        sessionToken,
       });
       this.broadcastLobby(room);
     } catch {
