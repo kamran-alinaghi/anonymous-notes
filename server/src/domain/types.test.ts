@@ -55,6 +55,7 @@ if (false) {
     kind: "INTERNAL_NOTE",
     id: "note-1",
     authorPlayerId: "player-1",
+    targetPlayerId: "player-2",
     content: "Example note",
   };
 
