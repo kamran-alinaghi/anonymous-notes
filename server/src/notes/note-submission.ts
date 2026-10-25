@@ -8,7 +8,7 @@ import {
   validateNoteBatch,
   type NoteDraft,
 } from "../domain/rules.js";
-import type { Note, Room } from "../domain/types.js";
+import type { Room } from "../domain/types.js";
 import type { RoomStore } from "../rooms/room-store.js";
 
 export interface NoteSubmissionDraft {
@@ -208,7 +208,3 @@ export class NoteSubmissionService {
   }
 }
 
-/** Internal helper kept explicit to document that internal notes are never projected over the transport. */
-export function countAcceptedNotes(notes: readonly Note[]): number {
-  return notes.length;
-}
