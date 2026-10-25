@@ -19,7 +19,7 @@ export interface RoundLifecycleError {
 }
 
 export type RoundLifecycleResult<T> =
-  | { ok: true; value: Room }
+  | { ok: true; value: T }
   | { ok: false; error: RoundLifecycleError };
 
 export interface RoundLifecycleOptions {
