@@ -197,7 +197,10 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         members = [...members, joiningPeer];
         const lobbyMessages = await expectRoomBroadcast(members, "LOBBY_UPDATED");
         const hostLobby = lobbyMessages[0]!;
-        expect(hostLobby.room).toMatchObject({ viewerRole: "HOST", playerCount: index + 1 });
+        expect(hostLobby.room).toMatchObject({
+          viewerRole: "HOST",
+          playerCount: mode === "INDIVIDUAL_DEVICES" ? index + 2 : index + 1,
+        });
         expect((hostLobby.room as { players: unknown[] }).players).toHaveLength(
           mode === "INDIVIDUAL_DEVICES" ? index + 2 : index + 1,
         );
@@ -206,7 +209,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         )).toBe(true);
       }
 
-      const lobby = (await store.getByCode("E2EAAA"))!;
+      const lobby = store.getByCode("E2EAAA")!;
       const initialPlayers = lobby.players;
       expect(initialPlayers).toHaveLength(4);
       expect(initialPlayers.some((player) => player.id === lobby.host.id))
@@ -297,13 +300,11 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
 
       const currentRoom = store.getByCode("E2EAAA")!;
       const actualPlayers = currentRoom.players;
-      const contentByPair = new Map<string, string>();
       let contentIndex = 0;
       const batchFor = (authorId: string) => actualPlayers
         .filter((target) => target.id !== authorId)
         .map((target) => {
           const content = `private-note-${++contentIndex}`;
-          contentByPair.set(`${authorId}:${target.id}`, content);
           return { targetPlayerId: target.id, content };
         });
 
@@ -421,6 +422,31 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
           : await expectRoomBroadcast(clients, "REVEAL_STATE_UPDATED");
         if (mode === "SINGLE_DEVICE") expect(revealMessages[0]?.type).toBe("REVEAL_STATE_UPDATED");
         verifyRevealStates(revealMessages, mode, position, store, playerIdByClient, clients, host);
+        if (position === 1) {
+          host.send({ type: "NAVIGATE_REVEAL", requestId: "previous-to-start", action: "PREVIOUS" });
+          await expectMessage(host, {
+            type: "REVEAL_NAVIGATED",
+            requestId: "previous-to-start",
+            position: 0,
+            total: totalNotes,
+          });
+          const previousMessages = mode === "SINGLE_DEVICE"
+            ? [await host.nextMessage()]
+            : await expectRoomBroadcast(clients, "REVEAL_STATE_UPDATED");
+          verifyRevealStates(previousMessages, mode, 0, store, playerIdByClient, clients, host);
+
+          host.send({ type: "NAVIGATE_REVEAL", requestId: "return-to-position-one", action: "NEXT" });
+          await expectMessage(host, {
+            type: "REVEAL_NAVIGATED",
+            requestId: "return-to-position-one",
+            position: 1,
+            total: totalNotes,
+          });
+          const returnedMessages = mode === "SINGLE_DEVICE"
+            ? [await host.nextMessage()]
+            : await expectRoomBroadcast(clients, "REVEAL_STATE_UPDATED");
+          verifyRevealStates(returnedMessages, mode, 1, store, playerIdByClient, clients, host);
+        }
       }
 
       host.send({ type: "NAVIGATE_REVEAL", requestId: "at-end-boundary", action: "NEXT" });
