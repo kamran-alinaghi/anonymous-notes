@@ -251,11 +251,18 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
       const nonSetter = orderedPlayers.find((player) => player.id !== setter.id)!;
       const nonSetterClient = playerClientsByNickname.get(nonSetter.nickname)!;
 
-      host.send({ type: "START_GAME", requestId: "unauthorized-start-from-hostless-check" });
-      // The host is always authorized to start the game; the request above is the real start.
+      joinedPlayers[0]!.send({ type: "START_GAME", requestId: "unauthorized-start" });
+      await expectMessage(joinedPlayers[0]!, {
+        type: "ERROR",
+        requestId: "unauthorized-start",
+        error: { code: "UNAUTHORIZED" },
+      });
+      expect(store.getByCode("E2EAAA")?.phase).toBe("LOBBY");
+
+      host.send({ type: "START_GAME", requestId: "start-game" });
       await expectMessage(host, {
         type: "GAME_STARTED",
-        requestId: "unauthorized-start-from-hostless-check",
+        requestId: "start-game",
         room: {
           phase: "CHOOSING_SUBJECT",
           currentRoundNumber: 1,
@@ -368,7 +375,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
           if (mode === "SINGLE_DEVICE") {
             expect(initialRevealMessages[0]?.type).toBe("REVEAL_STATE_UPDATED");
           }
-          verifyRevealStates(initialRevealMessages, mode, 0, store, playerIdByClient, host);
+          verifyRevealStates(initialRevealMessages, mode, 0, store, playerIdByClient, clients, host);
         }
       }
 
@@ -413,7 +420,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
           ? [await host.nextMessage()]
           : await expectRoomBroadcast(clients, "REVEAL_STATE_UPDATED");
         if (mode === "SINGLE_DEVICE") expect(revealMessages[0]?.type).toBe("REVEAL_STATE_UPDATED");
-        verifyRevealStates(revealMessages, mode, position, store, playerIdByClient, host);
+        verifyRevealStates(revealMessages, mode, position, store, playerIdByClient, clients, host);
       }
 
       host.send({ type: "NAVIGATE_REVEAL", requestId: "at-end-boundary", action: "NEXT" });
@@ -529,6 +536,7 @@ function verifyRevealStates(
   position: number,
   store: InMemoryRoomStore,
   playerIdByClient: Map<WebSocketPeer, string>,
+  clients: WebSocketPeer[],
   host: WebSocketPeer,
 ): void {
   const room = store.getByCode("E2EAAA");
@@ -541,8 +549,10 @@ function verifyRevealStates(
   const target = currentRoom.players.find((player) => player.id === note!.targetPlayerId)!;
   const assignment = round.readerAssignments.find((item) => item.noteId === note!.id);
 
-  expect(messages.length).toBe(mode === "SINGLE_DEVICE" ? 1 : currentRoom.players.length + 1);
-  for (const message of messages) {
+  expect(messages.length).toBe(mode === "SINGLE_DEVICE" ? 1 : currentRoom.players.length);
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index]!;
+    const client = mode === "SINGLE_DEVICE" ? host : clients[index]!;
     expect(message.type).toBe("REVEAL_STATE_UPDATED");
     const state = message.state as Record<string, unknown>;
     expect(state).toMatchObject({
@@ -559,11 +569,7 @@ function verifyRevealStates(
       expect(hasDisplayNote).toBe(true);
       expect(state.displayNote).toEqual({ content: note!.content, targetNickname: target.nickname });
     } else {
-      const client = [...playerIdByClient.keys()].find((candidate) =>
-        candidate === host ? playerIdByClient.get(candidate) !== undefined : true,
-      );
-      expect(client).toBeDefined();
-      const viewerPlayerId = playerIdByClient.get(client!);
+      const viewerPlayerId = playerIdByClient.get(client);
       const isAssignedReader = assignment?.readerPlayerId === viewerPlayerId;
       expect(hasDisplayNote).toBe(isAssignedReader);
       if (isAssignedReader) expect(state.displayNote).toEqual({ content: note!.content });
