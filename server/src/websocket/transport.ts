@@ -365,7 +365,7 @@ export class WebSocketTransport {
     if (room.phase === "LOBBY") {
       this.trySend(socket, {
         type: "LOBBY_UPDATED",
-        room: publicRoomView(room, session.role === "HOST" && session.hostId === room.host.id),
+        room: publicRoomView(room, identity.role === "HOST" && identity.hostId === room.host.id),
       });
     } else {
       this.trySend(socket, { type: "GAME_STATE_UPDATED", room: gameRoomView(room) });
@@ -387,7 +387,7 @@ export class WebSocketTransport {
       if (progress.ok) {
         this.trySend(socket, {
           type: "SUBMISSION_PROGRESS_UPDATED",
-          progress: submissionProgressView(progress.value, session.role === "HOST" && session.hostId !== null),
+          progress: submissionProgressView(progress.value, identity.role === "HOST" && identity.hostId !== null),
         });
       }
     }
