@@ -24,10 +24,21 @@ export interface GetRevealStatePayload {
   type: "GET_REVEAL_STATE";
 }
 
+export interface StartGamePayload {
+  type: "START_GAME";
+}
+
+export interface ReorderPlayersPayload {
+  type: "REORDER_PLAYERS";
+  playerIds: string[];
+}
+
 export type RequestPayload =
   | CreateRoomPayload
   | JoinRoomPayload
-  | GetRevealStatePayload;
+  | GetRevealStatePayload
+  | StartGamePayload
+  | ReorderPlayersPayload;
 
 export interface RoomPlayer {
   id: string;
