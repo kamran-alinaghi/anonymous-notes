@@ -33,12 +33,24 @@ export interface ReorderPlayersPayload {
   playerIds: string[];
 }
 
+export interface SetSubjectPayload {
+  type: "SET_SUBJECT";
+  subject: string;
+}
+
+export interface SubmitNoteBatchPayload {
+  type: "SUBMIT_NOTE_BATCH";
+  notes: Array<{ targetPlayerId: string; content: string }>;
+}
+
 export type RequestPayload =
   | CreateRoomPayload
   | JoinRoomPayload
   | GetRevealStatePayload
   | StartGamePayload
-  | ReorderPlayersPayload;
+  | ReorderPlayersPayload
+  | SetSubjectPayload
+  | SubmitNoteBatchPayload;
 
 export interface RoomPlayer {
   id: string;
