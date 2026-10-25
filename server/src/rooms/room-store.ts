@@ -14,6 +14,7 @@ function cloneRoom(room: Room): Room {
     ...room,
     host: { ...room.host },
     players: room.players.map((player) => ({ ...player })),
+    ...(room.disconnectedPlayerIds ? { disconnectedPlayerIds: [...room.disconnectedPlayerIds] } : {}),
     rounds: room.rounds.map((round) => ({
       ...round,
       notes: round.notes.map((note) => ({ ...note })),
