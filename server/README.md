@@ -4,7 +4,7 @@ TypeScript backend for Anonymous Note, built with Node.js, Fastify, and `@fastif
 
 ## Prerequisites
 
-- Node.js 22 or newer
+- Node.js 22.9 or newer
 - npm (the version bundled with your Node.js installation)
 
 ## Local development
