@@ -230,7 +230,7 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
   }
 
   if (value.type === "REORDER_PLAYERS") {
-    if (!Array.isArray(value.playerIds) || value.playerIds.length > 100 ||
+    if (!Array.isArray(value.playerIds) || value.playerIds.length > 10_000 ||
         value.playerIds.some((id) => !isString(id, 128))) {
       return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "REORDER_PLAYERS requires a playerIds array." };
     }
@@ -267,7 +267,7 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
     return { ok: true, message: { type: value.type, requestId } };
   }
 
-  if (!Array.isArray(value.notes) || value.notes.length > 100 ||
+  if (!Array.isArray(value.notes) || value.notes.length > 10_000 ||
       value.notes.some((note) => !isRecord(note) ||
         !isString(note.targetPlayerId, 128) ||
         typeof note.content !== "string" || note.content.length > 10_000)) {
