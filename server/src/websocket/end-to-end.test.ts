@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../app.js";
 import { GameManagementService } from "../game/game-management.js";
 import { RoundLifecycleService } from "../game/round-lifecycle.js";
+import { ConnectionLifecycleService } from "../game/connection-lifecycle.js";
 import { LobbyManagementService } from "../lobby/lobby-management.js";
 import { NoteSubmissionService } from "../notes/note-submission.js";
 import { RevealSessionService } from "../reveal/reveal-session.js";
@@ -95,6 +96,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
       generateNoteId: () => `e2e-note-${++noteId}`,
     });
     const revealSession = new RevealSessionService(store);
+    const connectionLifecycle = new ConnectionLifecycleService(store);
     const roundLifecycle = new RoundLifecycleService(store, {
       generateRoundId: () => `e2e-next-round-${++roundId}`,
     });
@@ -105,6 +107,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
       noteSubmission,
       revealSession,
       roundLifecycle,
+      connectionLifecycle,
       generateConnectionId: () => `e2e-connection-${++connectionId}`,
     });
     app = serverApp;
