@@ -62,6 +62,8 @@ function gameRoomView(room: Room): GameRoomView {
     phase: room.phase,
     hostNickname: room.host.nickname,
     playerCount: room.players.length,
+    // Room.players excludes the host in SINGLE_DEVICE and includes them in INDIVIDUAL_DEVICES.
+    players: room.players.map((player) => ({ id: player.id, nickname: player.nickname })),
     currentRoundNumber: currentRound?.number ?? 0,
     currentSubjectSetterNickname: setter?.nickname ?? null,
     subject: currentRound?.subject ?? null,
