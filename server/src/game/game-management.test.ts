@@ -37,7 +37,9 @@ describe("GameManagementService", () => {
   it.each(["SINGLE_DEVICE", "INDIVIDUAL_DEVICES"] as const)(
     "starts %s with the first actual player in fixed order as subject setter",
     (mode) => {
-      const { game, store, room, hostId } = setup(mode);
+      const { game, store, room: initialRoom, hostId } = setup(mode);
+      store.updateIfPresent(initialRoom.code, (current) => ({ ...current, players: [...current.players].reverse() }));
+      const room = store.getByCode(initialRoom.code)!;
       const orderedIds = room.players.map((player) => player.id);
       expect(room.players.some((player) => player.id === hostId)).toBe(mode === "INDIVIDUAL_DEVICES");
 
