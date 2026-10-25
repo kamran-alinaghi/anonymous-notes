@@ -277,9 +277,9 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
         item.disconnectedPlayers.some((player: { playerId: string }) => player.playerId === firstAuthor.id));
       const progressAfterDisconnect = await host.nextMatching((item) =>
         item.type === "SUBMISSION_PROGRESS_UPDATED" &&
-        (item.progress as { players?: Array<{ playerId: string; submitted: boolean }> }).players?.some(
+        ((item.progress as { players?: Array<{ playerId: string; submitted: boolean }> }).players?.some(
           (player) => player.playerId === firstAuthor.id && player.submitted === false,
-        ) ?? false);
+        ) ?? false));
       expect(progressAfterDisconnect.type).toBe("SUBMISSION_PROGRESS_UPDATED");
 
       // Finish all remaining batches. Reveal must wait for the disconnected author to return.
