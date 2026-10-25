@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --pretty",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit --pretty",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm test && npm run typecheck && npm run build"
