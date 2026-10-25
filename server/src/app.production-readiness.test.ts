@@ -56,7 +56,7 @@ describe("production-readiness controls", () => {
     try {
       app = await buildApp({ config: loadEnv({ NODE_ENV: "test", LOG_LEVEL: "silent" }) });
       await expect(app.listen({ host: "127.0.0.1", port })).rejects.toThrow();
-      await app.close();
+      await app.close().catch(() => undefined);
       app = undefined;
     } finally {
       await blocker.close();
@@ -109,12 +109,18 @@ describe("production-readiness controls", () => {
     const secondMessages: string[] = [];
     second.addEventListener("message", (event) => secondMessages.push(String(event.data)));
     const outcome = await new Promise<"opened" | "closed">((resolve, reject) => {
-      second.addEventListener("open", () => resolve("opened"), { once: true });
-      second.addEventListener("close", () => resolve("closed"), { once: true });
+      const timeout = setTimeout(() => reject(new Error("Second WebSocket connection was not rejected.")), 2_000);
+      second.addEventListener("open", () => {
+        clearTimeout(timeout);
+        resolve("opened");
+      }, { once: true });
+      second.addEventListener("close", () => {
+        clearTimeout(timeout);
+        resolve("closed");
+      }, { once: true });
       second.addEventListener("error", () => {
         // A rejected upgrade reports an error in browser-compatible WebSocket clients.
       }, { once: true });
-      setTimeout(() => reject(new Error("Second WebSocket connection was not rejected.")), 2_000);
     });
 
     expect(outcome).toBe("closed");
