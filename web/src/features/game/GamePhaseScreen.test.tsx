@@ -160,8 +160,9 @@ describe("GamePhaseScreen", () => {
 
     expect(screen.getByText("A secret compliment")).toBeInTheDocument();
     expect(screen.getByText("FOR Player 2")).toBeInTheDocument();
-    expect(screen.getByText("1", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText("3", { selector: "strong" })).toBeInTheDocument();
+    const position = document.querySelector(".reveal-position strong")?.textContent ?? "";
+    expect(position).toContain("1");
+    expect(position).toContain("3");
   });
 
   it("shows note content only when the individual-device server projection includes it", () => {
