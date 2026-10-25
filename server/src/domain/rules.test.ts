@@ -101,9 +101,14 @@ describe("room and identity validation", () => {
 });
 
 describe("subject setting", () => {
-  it("accepts nonempty subjects up to 300 characters", () => {
+  it("accepts trimmed nonempty subjects up to 300 characters", () => {
     expect(validateSubject("Topic").ok).toBe(true);
     expect(validateSubject("x".repeat(300)).ok).toBe(true);
+    expect(validateSubject("  Topic \\n").toMatchObject({ ok: true, value: "Topic" });
+    expect(validateSubject(" ".repeat(10) + "x".repeat(300) + " ".repeat(10)).toMatchObject({
+      ok: true,
+      value: "x".repeat(300),
+    });
     expect(validateSubject(" ").ok).toBe(false);
     expect(validateSubject("x".repeat(301)).ok).toBe(false);
   });
@@ -164,13 +169,21 @@ describe("note batch validation and atomic submission", () => {
     expect(validateNoteBatch(room, "p1", tooLong).ok).toBe(false);
   });
 
-  it("accepts exactly 1000 characters and rejects a second batch from the same player", () => {
+  it("trims note content before enforcing the 1–1000 character limit", () => {
     const room = writingRoom();
     const valid = draftsFor("p1");
-    valid[0] = { ...valid[0]!, content: "x".repeat(1000) };
+    valid[0] = { ...valid[0]!, content: "  " + "x".repeat(1000) + "  \\n" };
     const first = submitNoteBatch(room, "p1", valid);
     expect(first.ok).toBe(true);
-    if (first.ok) expect(submitNoteBatch(first.value, "p1", draftsFor("p1", "again")).ok).toBe(false);
+    if (first.ok) {
+      const stored = first.value.rounds[0]?.notes.find((note) => note.targetPlayerId === valid[0]!.targetPlayerId);
+      expect(stored?.content).toBe("x".repeat(1000));
+      expect(submitNoteBatch(first.value, "p1", draftsFor("p1", "again")).ok).toBe(false);
+    }
+
+    const tooLong = draftsFor("p1", "long");
+    tooLong[0] = { ...tooLong[0]!, content: "  " + "x".repeat(1001) + "  " };
+    expect(submitNoteBatch(room, "p1", tooLong).ok).toBe(false);
   });
 });
 
