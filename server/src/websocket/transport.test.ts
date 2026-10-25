@@ -70,11 +70,12 @@ describe("WebSocket transport integration", () => {
       generateId: () => `server-id-${++id}`,
     });
     let connectionId = 0;
-    app = await buildApp({
+    const serverApp = await buildApp({
       roomManagement,
       generateConnectionId: () => `connection-${++connectionId}`,
     });
-    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+    app = serverApp;
+    const address = await serverApp.listen({ host: "127.0.0.1", port: 0 });
     const peer = (path = "/ws") => {
       const created = new WebSocketPeer(address.replace("http", "ws") + path);
       peers.push(created);
