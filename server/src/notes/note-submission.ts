@@ -188,7 +188,7 @@ export class NoteSubmissionService {
         return {
           ...revealStarted.value,
           rounds: revealStarted.value.rounds.map((item) => item.id === revealRound.id
-            ? { ...item, readerAssignments: assignments.value }
+            ? { ...item, readerAssignments: assignments.value, revealIndex: 0 }
             : item),
         } as Room;
       });
