@@ -254,6 +254,178 @@ export class WebSocketTransport {
     }
   }
 
+  private identityKey(identity: ReconnectIdentity): string | null {
+    if (!identity.roomId || identity.role === "UNASSIGNED") return null;
+    const memberId = identity.playerId ?? identity.hostId;
+    return memberId ? `${identity.roomId}:${identity.role}:${memberId}` : null;
+  }
+
+  private issueSessionToken(identity: ReconnectIdentity): string | null {
+    const key = this.identityKey(identity);
+    if (!key) return null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const token = this.generateSessionToken();
+      if (typeof token !== "string" || token.length < 32 || token.length > 256 || this.reconnectCredentials.has(token)) continue;
+      const oldToken = this.credentialByIdentity.get(key);
+      if (oldToken) this.reconnectCredentials.delete(oldToken);
+      this.reconnectCredentials.set(token, { ...identity });
+      this.credentialByIdentity.set(key, token);
+      return token;
+    }
+    return null;
+  }
+
+  private bindIdentity(
+    socket: SessionConnection,
+    session: ConnectionSession,
+    identity: ReconnectIdentity,
+  ): string | null {
+    const key = this.identityKey(identity);
+    if (!key || this.activeByIdentity.has(key) || !this.sessions.bind(session, identity)) return null;
+    this.activeByIdentity.set(key, { socket, session });
+    const token = this.issueSessionToken(identity);
+    if (!token) {
+      this.activeByIdentity.delete(key);
+      this.sessions.unregister(socket);
+      return null;
+    }
+    return token;
+  }
+
+  private handleReconnect(
+    socket: SessionConnection,
+    session: ConnectionSession,
+    requestId: string,
+    presentedToken: string,
+  ): void {
+    if (session.role !== "UNASSIGNED") {
+      this.trySend(socket, safeError("SESSION_ALREADY_BOUND", "This connection already has an identity.", requestId));
+      return;
+    }
+    const identity = this.reconnectCredentials.get(presentedToken);
+    if (!identity) {
+      this.trySend(socket, safeError("INVALID_SESSION_CREDENTIAL", "The session credential is invalid or has already been used.", requestId));
+      return;
+    }
+    const key = this.identityKey(identity);
+    if (!key || this.activeByIdentity.has(key)) {
+      this.trySend(socket, safeError("SESSION_ALREADY_CONNECTED", "This identity already has an active connection.", requestId));
+      return;
+    }
+    const lifecycleState = identity.roomCode ? this.connectionLifecycle?.getState(identity.roomCode) : undefined;
+    if (!lifecycleState?.ok || lifecycleState.value.room.id !== identity.roomId ||
+        (identity.playerId !== null && !lifecycleState.value.room.players.some((player) => player.id === identity.playerId))) {
+      this.reconnectCredentials.delete(presentedToken);
+      if (this.credentialByIdentity.get(key) === presentedToken) this.credentialByIdentity.delete(key);
+      this.trySend(socket, safeError("STALE_SESSION", "The room or player identity no longer exists.", requestId));
+      return;
+    }
+
+    this.reconnectCredentials.delete(presentedToken);
+    if (this.credentialByIdentity.get(key) === presentedToken) this.credentialByIdentity.delete(key);
+    const nextToken = this.bindIdentity(socket, session, identity);
+    if (!nextToken) {
+      this.trySend(socket, safeError("SESSION_BIND_FAILED", "Could not restore this session.", requestId));
+      return;
+    }
+
+    let room = lifecycleState.value.room;
+    const wasPaused = lifecycleState.value.paused;
+    if (identity.playerId !== null && this.connectionLifecycle) {
+      const reconnected = this.connectionLifecycle.markReconnected(identity.roomCode!, identity.roomId!, identity.playerId);
+      if (!reconnected.ok) {
+        this.handleDisconnect(socket);
+        this.trySend(socket, safeError(reconnected.error.code, reconnected.error.message, requestId));
+        return;
+      }
+      room = reconnected.value;
+    }
+
+    this.trySend(socket, {
+      type: "SESSION_RESTORED",
+      requestId,
+      sessionRole: identity.role as "HOST" | "PLAYER",
+      nickname: identity.nickname ?? "",
+      sessionToken: nextToken,
+      room: gameRoomView(room),
+    });
+    this.trySend(socket, { type: "GAME_STATE_UPDATED", room: gameRoomView(room) });
+    this.broadcastConnectionState(room);
+
+    const currentState = this.connectionLifecycle?.getState(room.code);
+    if (wasPaused && currentState?.ok && !currentState.value.paused) {
+      this.broadcastToRoom(room.code, { type: "GAME_RESUMED", room: gameRoomView(room) });
+      this.broadcastGameState(room);
+      if (room.phase === "REVEALING") this.broadcastRevealState(room.code);
+    }
+    if (room.phase === "WRITING" && this.noteSubmission) {
+      const progress = this.noteSubmission.getProgress(room.code);
+      if (progress.ok) {
+        this.trySend(socket, {
+          type: "SUBMISSION_PROGRESS_UPDATED",
+          progress: submissionProgressView(progress.value, session.role === "HOST" && session.hostId !== null),
+        });
+      }
+    }
+    if (room.phase === "REVEALING" && !currentState?.value?.paused) this.broadcastRevealState(room.code);
+  }
+
+  private handleDisconnect(socket: SessionConnection): void {
+    const session = this.sessions.getForSocket(socket);
+    if (!session) return;
+    const key = this.identityKey(session);
+    const active = key ? this.activeByIdentity.get(key) : undefined;
+    const isCurrent = active?.socket === socket && active.session === session;
+    if (isCurrent && key) this.activeByIdentity.delete(key);
+    this.sessions.unregister(socket);
+
+    if (!isCurrent || !session.playerId || !session.roomCode || !session.roomId || !this.connectionLifecycle) return;
+    const result = this.connectionLifecycle.markDisconnected(session.roomCode, session.roomId, session.playerId);
+    if (result.ok) this.broadcastConnectionState(result.value);
+  }
+
+  private broadcastToRoom(roomCode: string, message: OutgoingMessage): void {
+    for (const [session, socket] of this.sessions.getConnectionsSnapshot()) {
+      if (session.roomCode === roomCode) this.trySend(socket, message);
+    }
+  }
+
+  private broadcastConnectionState(room: Room): void {
+    const result = this.connectionLifecycle?.getState(room.code);
+    if (!result?.ok) return;
+    const state = result.value;
+    const disconnectedPlayers = state.disconnectedPlayers.map((player) => ({
+      playerId: player.id,
+      nickname: player.nickname,
+    }));
+    for (const [session, socket] of this.sessions.getConnectionsSnapshot()) {
+      if (session.roomCode !== room.code) continue;
+      this.trySend(socket, {
+        type: "PLAYER_CONNECTIONS_UPDATED",
+        roomCode: room.code,
+        phase: state.room.phase,
+        disconnectedPlayers,
+        paused: state.paused,
+      });
+      if (state.paused) {
+        this.trySend(socket, {
+          type: "WAITING_FOR_PLAYERS",
+          roomCode: room.code,
+          phase: state.room.phase,
+          disconnectedPlayers,
+        });
+      }
+    }
+  }
+
+  private rejectIfPaused(socket: SessionConnection, session: ConnectionSession, requestId: string): boolean {
+    if (!session.roomCode || !this.connectionLifecycle) return false;
+    const state = this.connectionLifecycle.getState(session.roomCode);
+    if (!state.ok || !state.value.paused) return false;
+    this.trySend(socket, safeError("GAME_PAUSED", "Game progression is paused until every disconnected player reconnects.", requestId));
+    return true;
+  }
+
   private handleReorder(
     socket: SessionConnection,
     session: ConnectionSession,
@@ -491,7 +663,7 @@ export class WebSocketTransport {
     try {
       this.send(socket, message);
     } catch {
-      this.sessions.unregister(socket);
+      this.handleDisconnect(socket);
     }
   }
 }
