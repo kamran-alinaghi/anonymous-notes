@@ -59,6 +59,9 @@ export function validateRoom(room: Room): DomainResult<Room> {
     if (room.host.nickname.trim().length === 0 || room.host.nickname.length > MAX_NICKNAME_LENGTH) {
       errors.push("Host nickname must be nonempty and at most 40 characters.");
     }
+    if (nicknameKeys.has(room.host.nickname.trim().toLocaleLowerCase("en"))) {
+      errors.push("Host nickname must be unique (case-insensitive).");
+    }
   } else {
     const hostPlayer = room.players.find((player) => player.id === room.host.id);
     if (!hostPlayer) errors.push("An INDIVIDUAL_DEVICES host must be an actual player.");
@@ -132,8 +135,29 @@ export function transitionRoom(room: Room, nextPhase: GamePhase): DomainResult<R
   if (nextPhase === "REVEALING") {
     const round = getCurrentRound(room);
     if (!round) return failure("There is no current round to reveal.");
-    const expected = room.players.length * (room.players.length - 1);
-    if (round.notes.length !== expected) return failure("All players must submit a complete note batch before reveal.");
+    const expectedPerPlayer = room.players.length - 1;
+    const expectedTotal = room.players.length * expectedPerPlayer;
+    if (round.notes.length !== expectedTotal) return failure("All players must submit a complete note batch before reveal.");
+    const knownPlayerIds = new Set(room.players.map((player) => player.id));
+    const noteIds = new Set<string>();
+    for (const player of room.players) {
+      const authored = round.notes.filter((note) => note.authorPlayerId === player.id);
+      if (authored.length !== expectedPerPlayer) {
+        return failure(`Player "${player.id}" must submit exactly one note for every other player.`);
+      }
+      const targets = new Set<string>();
+      for (const note of authored) {
+        if (!knownPlayerIds.has(note.targetPlayerId) || note.targetPlayerId === player.id || targets.has(note.targetPlayerId)) {
+          return failure(`Player "${player.id}" has an invalid or duplicate note recipient.`);
+        }
+        if (noteIds.has(note.id)) return failure(`Duplicate note id "${note.id}".`);
+        noteIds.add(note.id);
+        targets.add(note.targetPlayerId);
+      }
+      if (targets.size !== expectedPerPlayer) {
+        return failure(`Player "${player.id}" must submit exactly one note for every other player.`);
+      }
+    }
   }
   return success({ ...room, phase: nextPhase });
 }
