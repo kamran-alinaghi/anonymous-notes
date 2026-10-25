@@ -70,7 +70,7 @@ export class ConnectionSessions {
   }
 
   getConnectionsSnapshot(): Array<[ConnectionSession, SessionConnection]> {
-    return [...this.byConnectionId.values()].map(({ session, socket }) => [session, socket]);
+    return [...this.byConnectionId.values()].map(({ session, socket }): [ConnectionSession, SessionConnection] => [session, socket]);
   }
 
   get size(): number {
