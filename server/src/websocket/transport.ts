@@ -86,6 +86,7 @@ export class WebSocketTransport {
     private readonly gameManagement?: GameManagementService,
     private readonly noteSubmission?: NoteSubmissionService,
     private readonly revealSession?: RevealSessionService,
+    private readonly roundLifecycle?: RoundLifecycleService,
   ) {
     this.sessions = new ConnectionSessions(generateConnectionId);
   }
@@ -146,6 +147,10 @@ export class WebSocketTransport {
       }
       if (parsed.message.type === "NAVIGATE_REVEAL") {
         this.handleNavigateReveal(socket, session, parsed.message.requestId, parsed.message.action);
+        return;
+      }
+      if (parsed.message.type === "COMPLETE_ROUND" || parsed.message.type === "FINISH_GAME" || parsed.message.type === "START_NEXT_ROUND") {
+        this.handleRoundLifecycle(socket, session, parsed.message.requestId, parsed.message.type);
         return;
       }
 
