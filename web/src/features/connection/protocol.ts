@@ -24,6 +24,13 @@ export interface GetRevealStatePayload {
   type: "GET_REVEAL_STATE";
 }
 
+export type RevealNavigationAction = "NEXT" | "PREVIOUS";
+
+export interface NavigateRevealPayload {
+  type: "NAVIGATE_REVEAL";
+  action: RevealNavigationAction;
+}
+
 export interface StartGamePayload {
   type: "START_GAME";
 }
@@ -50,7 +57,8 @@ export type RequestPayload =
   | StartGamePayload
   | ReorderPlayersPayload
   | SetSubjectPayload
-  | SubmitNoteBatchPayload;
+  | SubmitNoteBatchPayload
+  | NavigateRevealPayload;
 
 export interface RoomPlayer {
   id: string;
@@ -83,9 +91,29 @@ export interface RevealStateView {
   roomCode: string;
   revealMode: RevealMode;
   phase: "REVEALING";
+  /** Zero-based index in the server-authoritative reveal sequence. */
   position: number;
   total: number;
+  /** Present only when this viewer is allowed to read the current note. */
   displayNote?: { content: string; targetNickname?: string };
+}
+
+export interface RevealStateMessage extends ServerMessage {
+  type: "REVEAL_STATE";
+  requestId: string;
+  state: RevealStateView;
+}
+
+export interface RevealStateUpdatedMessage extends ServerMessage {
+  type: "REVEAL_STATE_UPDATED";
+  state: RevealStateView;
+}
+
+export interface RevealNavigatedMessage extends ServerMessage {
+  type: "REVEAL_NAVIGATED";
+  requestId: string;
+  position: number;
+  total: number;
 }
 
 export interface ServerMessage {
