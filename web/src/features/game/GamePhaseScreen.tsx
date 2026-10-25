@@ -201,16 +201,18 @@ export function GamePhaseScreen({
               </div>
             )}
           </div>
-          {viewerRole === "HOST" && (
+          {(viewerRole === "HOST" || Boolean(revealState?.displayNote)) && (
             <div className="reveal-controls">
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={busy || !revealState || revealState.position <= 0}
-                onClick={() => void onNavigateReveal("PREVIOUS")}
-              >
-                ← Previous note
-              </button>
+              {viewerRole === "HOST" && (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={busy || !revealState || revealState.position <= 0}
+                  onClick={() => void onNavigateReveal("PREVIOUS")}
+                >
+                  ← Previous note
+                </button>
+              )}
               <button
                 className="primary-button"
                 type="button"
