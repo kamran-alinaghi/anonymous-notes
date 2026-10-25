@@ -19,12 +19,11 @@ export async function websocketRoutes(app: FastifyInstance, options: WebSocketRo
           app.log.warn({ event: "websocket_origin_rejected" }, "WebSocket request rejected by origin policy");
           return reply.code(403).send({ error: "ORIGIN_NOT_ALLOWED" });
         }
-        if (!options.transport.canAcceptConnection) {
-          return reply.code(503).send({ error: "SERVER_BUSY" });
-        }
       },
     },
     (socket) => {
+      // The connection limit must be enforced after the WebSocket socket exists.
+      // WebSocketTransport.attach closes excess sockets with code 1013.
       options.transport.attach(socket as unknown as SessionConnection);
     },
   );
