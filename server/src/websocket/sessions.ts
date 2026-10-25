@@ -14,6 +14,7 @@ export interface ConnectionSession {
 
 export interface SessionConnection {
   send(data: string): unknown;
+  close?(code?: number, reason?: string): unknown;
   on(event: "close", listener: () => void): unknown;
   on(event: "error", listener: (error: Error) => void): unknown;
   on(event: "message", listener: (data: unknown) => void): unknown;
