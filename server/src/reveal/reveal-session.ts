@@ -90,7 +90,7 @@ export class RevealSessionService {
 
   navigate(
     roomCode: string,
-    authenticatedHostId: string,
+    viewer: RevealViewer,
     action: RevealNavigationAction,
   ): RevealSessionResult<{ position: number; total: number }> {
     if (action !== "NEXT" && action !== "PREVIOUS") {
@@ -106,14 +106,35 @@ export class RevealSessionService {
         operationError = failure("ROOM_UNAVAILABLE", "Reveal navigation is paused until every disconnected player reconnects.");
         return undefined;
       }
-      if (room.host.id !== authenticatedHostId) {
-        operationError = failure("UNAUTHORIZED", "Only the authenticated room host may navigate the reveal.");
+      const isHost = viewer.role === "HOST" &&
+        viewer.hostId === room.host.id &&
+        (room.revealMode === "SINGLE_DEVICE"
+          ? viewer.playerId === null
+          : viewer.playerId === room.host.id);
+      const isPlayer = viewer.role === "PLAYER" &&
+        viewer.hostId === null &&
+        viewer.playerId !== null &&
+        room.players.some((player) => player.id === viewer.playerId);
+      if (!isHost && !isPlayer) {
+        operationError = failure("UNAUTHORIZED", "An authenticated room host or player is required.");
+        return undefined;
+      }
+      if (action === "PREVIOUS" && !isHost) {
+        operationError = failure("UNAUTHORIZED", "Only the host may navigate to the previous note.");
         return undefined;
       }
       const state = validateRevealState(room);
       if (!state) {
         operationError = failure("REVEAL_NOT_READY", "The reveal sequence or reader assignments are not ready.");
         return undefined;
+      }
+      if (action === "NEXT" && isPlayer) {
+        const currentNoteId = state.sequence[state.index];
+        const assignment = currentRound(room)?.readerAssignments.find((item) => item.noteId === currentNoteId);
+        if (!assignment || assignment.readerPlayerId !== viewer.playerId) {
+          operationError = failure("UNAUTHORIZED", "Only the player assigned to read the current note may advance it.");
+          return undefined;
+        }
       }
       const nextIndex = state.index + (action === "NEXT" ? 1 : -1);
       if (nextIndex < 0 || nextIndex >= state.sequence.length) {
