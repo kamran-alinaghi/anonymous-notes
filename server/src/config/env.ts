@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 export type NodeEnvironment = "development" | "test" | "production";
 export type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace" | "silent";
 
@@ -66,11 +68,12 @@ export function loadEnv(source: EnvironmentSource = process.env): AppConfig {
   }
 
   const host = source.HOST?.trim() || "127.0.0.1";
-  if (host.length > 253 || /[\s/]/.test(host)) {
+  const hostnamePattern = /^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*\\.?$/;
+  if (isIP(host) === 0 && !hostnamePattern.test(host)) {
     throw new Error("Invalid environment variable HOST: expected a hostname or IP address.");
   }
 
-  const rawLogLevel = source.LOG_LEVEL ?? (rawNodeEnv === "production" ? "info" : "debug");
+  const rawLogLevel = source.LOG_LEVEL ?? (rawNodeEnv === "development" ? "debug" : "info");
   const validLogLevels: LogLevel[] = ["fatal", "error", "warn", "info", "debug", "trace", "silent"];
   if (!validLogLevels.includes(rawLogLevel as LogLevel)) {
     throw new Error("Invalid environment variable LOG_LEVEL: unsupported log level.");
