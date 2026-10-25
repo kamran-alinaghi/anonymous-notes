@@ -21,7 +21,7 @@ function makeRoom(revealMode: Room["revealMode"] = "SINGLE_DEVICE"): Room {
         id: `n-${author.id}-${target.id}`,
         authorPlayerId: author.id,
         targetPlayerId: target.id,
-        content: `private ${author.id} to ${target.id}`,
+        content: `private note ${notes.length + 1}`,
       });
     }
   }
