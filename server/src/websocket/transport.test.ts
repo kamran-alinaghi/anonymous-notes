@@ -5,6 +5,7 @@ import { InMemoryRoomStore } from "../rooms/room-store.js";
 import { RoomManagementService } from "../rooms/room-management.js";
 import { LobbyManagementService } from "../lobby/lobby-management.js";
 import { GameManagementService } from "../game/game-management.js";
+import { NoteSubmissionService } from "../notes/note-submission.js";
 
 type WireMessage = Record<string, unknown>;
 
@@ -75,11 +76,14 @@ describe("WebSocket transport integration", () => {
     const lobbyManagement = new LobbyManagementService(store);
     let roundId = 0;
     const gameManagement = new GameManagementService(store, { generateRoundId: () => "round-" + (++roundId) });
+    let noteId = 0;
+    const noteSubmission = new NoteSubmissionService(store, { generateNoteId: () => "note-" + (++noteId) });
     let connectionId = 0;
     const serverApp = await buildApp({
       roomManagement,
       lobbyManagement,
       gameManagement,
+      noteSubmission,
       generateConnectionId: () => `connection-${++connectionId}`,
     });
     app = serverApp;
@@ -328,6 +332,77 @@ describe("WebSocket transport integration", () => {
       error: { code: "ROOM_UNAVAILABLE" },
     });
     expect(host.messages).toHaveLength(0);
+  });
+
+  it("accepts private note batches, exposes host-only submission status, and transitions after the final batch", async () => {
+    const { peer } = await setup();
+    const host = peer();
+    const players = [peer(), peer(), peer()];
+    const clients = [host, ...players];
+    await Promise.all(clients.map(connected));
+
+    host.send({ type: "CREATE_ROOM", requestId: "notes-create", revealMode: "INDIVIDUAL_DEVICES", hostNickname: "Host" });
+    expect((await host.nextMessage()).type).toBe("ROOM_CREATED");
+
+    let hostRoom = { players: [] as Array<{ id: string; nickname: string }> };
+    for (let index = 0; index < players.length; index += 1) {
+      const joining = players[index]!;
+      joining.send({ type: "JOIN_ROOM", requestId: "notes-join-" + index, roomCode: "AAAAAA", nickname: "Player" + (index + 1) });
+      expect((await joining.nextMessage()).type).toBe("ROOM_JOINED");
+      const hostUpdate = await host.nextMessage();
+      expect(hostUpdate.type).toBe("LOBBY_UPDATED");
+      hostRoom = hostUpdate.room as typeof hostRoom;
+      expect((await joining.nextMessage()).type).toBe("LOBBY_UPDATED");
+      for (let prior = 0; prior < index; prior += 1) {
+        expect((await players[prior]!.nextMessage()).type).toBe("LOBBY_UPDATED");
+      }
+    }
+
+    host.send({ type: "START_GAME", requestId: "notes-start" });
+    expect((await host.nextMessage()).type).toBe("GAME_STARTED");
+    expect((await host.nextMessage()).type).toBe("GAME_STATE_UPDATED");
+    for (const player of players) expect((await player.nextMessage()).type).toBe("GAME_STATE_UPDATED");
+
+    host.send({ type: "SET_SUBJECT", requestId: "notes-subject", subject: "A mystery" });
+    expect((await host.nextMessage()).type).toBe("SUBJECT_SUBMITTED");
+    expect((await host.nextMessage()).type).toBe("GAME_STATE_UPDATED");
+    for (const player of players) expect((await player.nextMessage()).type).toBe("GAME_STATE_UPDATED");
+
+    const ids = hostRoom.players.map((player) => player.id);
+    expect(ids).toHaveLength(4);
+    for (const author of hostRoom.players) {
+      const authorClient = author.id === hostRoom.players[0]?.id ? host : players.find((_, index) => hostRoom.players[index + 1]?.id === author.id)!;
+      const notes = hostRoom.players
+        .filter((target) => target.id !== author.id)
+        .map((target) => ({ targetPlayerId: target.id, content: "private note from " + author.nickname }));
+      authorClient.send({ type: "SUBMIT_NOTE_BATCH", requestId: "batch-" + author.id, notes });
+      const accepted = await authorClient.nextMessage();
+      expect(accepted).toMatchObject({
+        type: "NOTE_BATCH_ACCEPTED",
+        requestId: "batch-" + author.id,
+        submittedNotes: 3,
+      });
+      expect(JSON.stringify(accepted)).not.toContain("private note");
+      if (author.id === hostRoom.players[0]?.id) {
+        expect(accepted.progress).toHaveProperty("players");
+      } else {
+        expect(accepted.progress).not.toHaveProperty("players");
+      }
+
+      for (const client of clients) {
+        const update = await client.nextMessage();
+        expect(update.type).toBe("SUBMISSION_PROGRESS_UPDATED");
+        expect(JSON.stringify(update)).not.toContain("private note");
+        if (client === host) {
+          expect(update.progress).toHaveProperty("players");
+        } else {
+          expect(update.progress).not.toHaveProperty("players");
+        }
+      }
+      if (author.id === hostRoom.players[hostRoom.players.length - 1]?.id) {
+        expect(accepted.progress).toMatchObject({ phase: "REVEALING", submittedCount: 4, totalPlayerCount: 4 });
+      }
+    }
   });
 
   it("unregisters a disconnected connection without removing room membership", async () => {
