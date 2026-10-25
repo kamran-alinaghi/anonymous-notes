@@ -359,7 +359,14 @@ export class WebSocketTransport {
       sessionToken: nextToken,
       room: gameRoomView(room),
     });
-    this.trySend(socket, { type: "GAME_STATE_UPDATED", room: gameRoomView(room) });
+    if (room.phase === "LOBBY") {
+      this.trySend(socket, {
+        type: "LOBBY_UPDATED",
+        room: publicRoomView(room, session.role === "HOST" && session.hostId === room.host.id),
+      });
+    } else {
+      this.trySend(socket, { type: "GAME_STATE_UPDATED", room: gameRoomView(room) });
+    }
     this.broadcastConnectionState(room);
     if (deferredRevealStarted && deferredProgress) {
       this.broadcastSubmissionProgress(deferredProgress);
