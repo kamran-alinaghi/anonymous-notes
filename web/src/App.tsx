@@ -170,7 +170,7 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
       typeof message.progress === "object" && message.progress !== null) {
       const progress = message.progress as SubmissionProgressView;
       setSubmissionProgress(progress);
-      if (progress.phase === "REVEALING" && gameRoom) {
+      if (progress.phase === "REVEALING") {
         setGameRoom((current) => current ? { ...current, phase: "REVEALING" } : current);
       }
       return;
