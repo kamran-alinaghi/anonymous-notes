@@ -126,6 +126,18 @@ describe("WebSocket message contracts", () => {
     });
   });
 
+  it("parses round completion and host game lifecycle decisions", () => {
+    expect(parseIncomingMessage({ type: "COMPLETE_ROUND", requestId: "complete-1" })).toEqual({
+      ok: true, message: { type: "COMPLETE_ROUND", requestId: "complete-1" },
+    });
+    expect(parseIncomingMessage({ type: "START_NEXT_ROUND", requestId: "next-1" })).toEqual({
+      ok: true, message: { type: "START_NEXT_ROUND", requestId: "next-1" },
+    });
+    expect(parseIncomingMessage({ type: "FINISH_GAME", requestId: "finish-1" })).toEqual({
+      ok: true, message: { type: "FINISH_GAME", requestId: "finish-1" },
+    });
+  });
+
   it("rejects unsupported types consistently and bounds request IDs", () => {
     expect(parseIncomingMessage({ type: "DELETE_ROOM", requestId: "x" })).toMatchObject({
       ok: false,
