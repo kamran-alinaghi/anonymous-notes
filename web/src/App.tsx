@@ -6,7 +6,9 @@ import {
   type RevealMode,
   type ServerMessage,
   type SessionRestoredMessage,
+  type SubmissionProgressView,
 } from "./features/connection/protocol";
+import { GamePhaseScreen } from "./features/game/GamePhaseScreen";
 import { WebSocketClient, type ConnectionSnapshot } from "./features/connection/websocket-client";
 import "./styles.css";
 
@@ -88,6 +90,8 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
   const [roomCode, setRoomCode] = useState("");
   const [revealMode, setRevealMode] = useState<RevealMode>("INDIVIDUAL_DEVICES");
   const [lobby, setLobby] = useState<LobbyState | null>(null);
+  const [gameRoom, setGameRoom] = useState<GameRoomView | null>(null);
+  const [submissionProgress, setSubmissionProgress] = useState<SubmissionProgressView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -121,34 +125,54 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
     if (message.type === "SESSION_RESTORED") {
       const restored = message as SessionRestoredMessage;
       setNickname(restored.nickname);
-      if (restored.room.phase === "LOBBY") {
-        setLobby(lobbyFromRestoredRoom(restored.room, restored.sessionRole, restored.nickname));
-        setScreen("lobby");
-        setError(null);
-        setNotice("Your previous session was restored.");
-      } else {
-        setLobby(lobbyFromRestoredRoom(restored.room, restored.sessionRole, restored.nickname));
-        setScreen("game");
-        setError(null);
-        setNotice("Your session was restored. This game phase will be available in the next frontend step.");
-      }
+      setLobby(lobbyFromRestoredRoom(restored.room, restored.sessionRole, restored.nickname));
+      setGameRoom(restored.room);
+      setScreen(restored.room.phase === "LOBBY" ? "lobby" : "game");
+      setError(null);
+      setNotice("Your previous session was restored.");
       return;
     }
 
     if (message.type === "GAME_STARTED" && typeof message.room === "object" && message.room !== null) {
-      setLobby((current) => {
-        if (!current) return current;
-        const room = message.room as GameRoomView;
-        return {
-          ...current,
-          phase: room.phase,
-          playerCount: room.playerCount,
-          players: room.players,
-        };
-      });
+      const room = message.room as GameRoomView;
+      setGameRoom(room);
+      setLobby((current) => current ? {
+        ...current,
+        phase: room.phase,
+        playerCount: room.playerCount,
+        players: room.players,
+      } : current);
       setScreen("game");
-      setNotice("The game has started. The next game screen is coming in the next implementation step.");
+      setNotice(null);
       setError(null);
+      return;
+    }
+
+    if ((message.type === "SUBJECT_SUBMITTED" || message.type === "GAME_STATE_UPDATED" ||
+      message.type === "ROUND_COMPLETED" || message.type === "GAME_FINISHED" ||
+      message.type === "NEXT_ROUND_STARTED" || message.type === "GAME_TERMINATED") &&
+      typeof message.room === "object" && message.room !== null) {
+      const room = message.room as GameRoomView;
+      setGameRoom(room);
+      setLobby((current) => current ? {
+        ...current,
+        phase: room.phase,
+        playerCount: room.playerCount,
+        players: room.players,
+      } : current);
+      setScreen(room.phase === "LOBBY" ? "lobby" : "game");
+      setNotice(null);
+      setError(null);
+      return;
+    }
+
+    if ((message.type === "NOTE_BATCH_ACCEPTED" || message.type === "SUBMISSION_PROGRESS_UPDATED") &&
+      typeof message.progress === "object" && message.progress !== null) {
+      const progress = message.progress as SubmissionProgressView;
+      setSubmissionProgress(progress);
+      if (progress.phase === "REVEALING" && gameRoom) {
+        setGameRoom((current) => current ? { ...current, phase: "REVEALING" } : current);
+      }
       return;
     }
 
@@ -260,6 +284,36 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
       });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Could not change the player order.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setSubject = async (subject: string) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await client.request({ type: "SET_SUBJECT", subject });
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Could not submit the subject.";
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitNoteBatch = async (notes: Array<{ targetPlayerId: string; content: string }>) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await client.request({ type: "SUBMIT_NOTE_BATCH", notes });
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Could not submit your notes.";
+      setError(message);
+      throw new Error(message);
     } finally {
       setBusy(false);
     }
@@ -397,18 +451,20 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
           </>
         )}
 
-        {screen === "game" && lobby && (
-          <>
-            <p className="eyebrow">GAME IN PROGRESS</p>
-            <h1 id="app-title">The room <span>is live.</span></h1>
-            <p className="welcome-copy compact-copy">{notice ?? `Room ${lobby.roomCode} has moved to the ${lobby.phase.toLowerCase().replaceAll("_", " ")} phase.`}</p>
-            <div className="room-code-card"><span>ROOM CODE</span><strong>{lobby.roomCode}</strong></div>
-            <p className="subtle-copy">The next frontend task will implement the subject-selection and writing screens.</p>
-          </>
+        {screen === "game" && gameRoom && lobby && (
+          <GamePhaseScreen
+            room={gameRoom}
+            nickname={lobby.nickname}
+            viewerRole={lobby.viewerRole}
+            progress={submissionProgress}
+            busy={busy}
+            onSetSubject={setSubject}
+            onSubmitBatch={submitNoteBatch}
+          />
         )}
 
         {error && <p className="feedback-message error-message" role="alert">{error}</p>}
-        {notice && screen !== "game" && <p className="feedback-message notice-message" role="status">{notice}</p>}
+        {notice && <p className="feedback-message notice-message" role="status">{notice}</p>}
         {connection.lastError && connection.status !== "connected" && <p className="subtle-copy connection-detail">{connection.lastError}</p>}
       </section>
 
