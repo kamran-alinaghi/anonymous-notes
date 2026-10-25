@@ -518,7 +518,13 @@ export class WebSocketTransport {
 
     if (!isCurrent || !session.playerId || !session.roomCode || !session.roomId || !this.connectionLifecycle) return;
     const result = this.connectionLifecycle.markDisconnected(session.roomCode, session.roomId, session.playerId);
-    if (result.ok) this.broadcastConnectionState(result.value);
+    if (result.ok) {
+      this.broadcastConnectionState(result.value);
+      if (result.value.phase === "WRITING" && this.noteSubmission) {
+        const progress = this.noteSubmission.getProgress(result.value.code);
+        if (progress.ok) this.broadcastSubmissionProgress(progress.value);
+      }
+    }
   }
 
   private broadcastToRoom(roomCode: string, message: OutgoingMessage): void {
