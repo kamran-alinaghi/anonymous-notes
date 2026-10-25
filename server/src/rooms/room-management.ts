@@ -103,6 +103,9 @@ export class RoomManagementService {
       return failure("INVALID_REVEAL_MODE", "Reveal mode must be SINGLE_DEVICE or INDIVIDUAL_DEVICES.");
     }
 
+    if (typeof input.hostNickname !== "string") {
+      return failure("INVALID_NICKNAME", "Nickname must be text.");
+    }
     const hostNickname = normalizeNickname(input.hostNickname);
     const nicknameValidation = validateNickname(hostNickname);
     if (!nicknameValidation.ok) {
@@ -165,7 +168,13 @@ export class RoomManagementService {
   }
 
   joinRoom(input: JoinRoomInput): ApplicationResult<JoinedRoom> {
-    const codeValidation = validateRoomCode(input?.roomCode);
+    if (typeof input?.roomCode !== "string") {
+      return failure("INVALID_ROOM_CODE", "Room code must contain exactly six uppercase letters A-Z.");
+    }
+    if (typeof input.nickname !== "string") {
+      return failure("INVALID_NICKNAME", "Nickname must be text.");
+    }
+    const codeValidation = validateRoomCode(input.roomCode);
     if (!codeValidation.ok) {
       return failure("INVALID_ROOM_CODE", codeValidation.errors.join(" "));
     }
@@ -182,7 +191,10 @@ export class RoomManagementService {
       return failure("ROOM_UNAVAILABLE", "This room is not accepting new players.");
     }
 
-    if (current.players.some((player) => nicknameKey(player.nickname) === nicknameKey(nickname))) {
+    const nicknameAlreadyUsed = (room: Room) =>
+      room.players.some((player) => nicknameKey(player.nickname) === nicknameKey(nickname)) ||
+      (room.revealMode === "SINGLE_DEVICE" && nicknameKey(room.host.nickname) === nicknameKey(nickname));
+    if (nicknameAlreadyUsed(current)) {
       return failure("DUPLICATE_NICKNAME", "That nickname is already used in this room.");
     }
 
@@ -203,9 +215,7 @@ export class RoomManagementService {
       joined = this.store.updateIfPresent(input.roomCode, (room) => {
         // Recheck every condition inside the atomic update operation.
         if (room.phase !== "LOBBY") return undefined;
-        if (room.players.some((existing) => nicknameKey(existing.nickname) === nicknameKey(nickname))) {
-          return undefined;
-        }
+        if (nicknameAlreadyUsed(room)) return undefined;
         if (room.players.some((existing) => existing.id === playerId) ||
             (room.revealMode === "SINGLE_DEVICE" && room.host.id === playerId)) {
           return undefined;
@@ -220,7 +230,7 @@ export class RoomManagementService {
       const latest = this.store.getByCode(input.roomCode);
       if (!latest) return failure("ROOM_NOT_FOUND", "No active room exists with that code.");
       if (latest.phase !== "LOBBY") return failure("ROOM_UNAVAILABLE", "This room is not accepting new players.");
-      if (latest.players.some((existing) => nicknameKey(existing.nickname) === nicknameKey(nickname))) {
+      if (nicknameAlreadyUsed(latest)) {
         return failure("DUPLICATE_NICKNAME", "That nickname is already used in this room.");
       }
       return failure("ROOM_UNAVAILABLE", "Room could not be updated. Please try again.");
