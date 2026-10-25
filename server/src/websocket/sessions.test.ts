@@ -7,7 +7,7 @@ import type { SessionConnection } from "./sessions.js";
 
 class FakeSocket implements SessionConnection {
   readonly sent: string[] = [];
-  private readonly listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+  private readonly listeners = new Map<string, Array<(...args: any[]) => void>>();
 
   send(data: string): void {
     this.sent.push(data);
@@ -16,7 +16,7 @@ class FakeSocket implements SessionConnection {
   on(event: "message", listener: (data: unknown) => void): this;
   on(event: "close", listener: () => void): this;
   on(event: "error", listener: (error: Error) => void): this;
-  on(event: string, listener: (...args: unknown[]) => void): this {
+  on(event: string, listener: (...args: any[]) => void): this {
     const listeners = this.listeners.get(event) ?? [];
     listeners.push(listener);
     this.listeners.set(event, listeners);
