@@ -13,8 +13,11 @@ async function start(): Promise<void> {
       { event: "server_started", address, environment: env.nodeEnv },
       "Anonymous Note server started",
     );
-  } catch {
-    app.log.error({ event: "server_start_failed" }, "Anonymous Note server failed to start");
+  } catch (error) {
+    const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+      ? error.code
+      : "UNKNOWN";
+    app.log.error({ event: "server_start_failed", code }, "Anonymous Note server failed to start");
     try {
       await app.close();
     } catch {
