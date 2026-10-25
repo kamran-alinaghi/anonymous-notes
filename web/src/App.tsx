@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import {
   type GameRoomView,
@@ -180,7 +180,7 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
     };
   }, [client, handleMessage]);
 
-  const createRoom = async (event: React.FormEvent<HTMLFormElement>) => {
+  const createRoom = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleanNickname = nickname.trim();
     if (!cleanNickname) {
@@ -203,7 +203,7 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
     }
   };
 
-  const joinRoom = async (event: React.FormEvent<HTMLFormElement>) => {
+  const joinRoom = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleanNickname = nickname.trim();
     const cleanRoomCode = roomCode.trim().toUpperCase();
