@@ -101,6 +101,10 @@ describe("GameManagementService", () => {
       ok: false,
       error: { code: "NOT_SUBJECT_SETTER" },
     });
+    expect(game.submitSubject(room.code, hostId, "Host is not an actual player in SINGLE_DEVICE")).toMatchObject({
+      ok: false,
+      error: { code: "NOT_SUBJECT_SETTER" },
+    });
     expect(store.getByCode(room.code)).toEqual(started.value);
 
     const submitted = game.submitSubject(room.code, setterId, "A good subject");
