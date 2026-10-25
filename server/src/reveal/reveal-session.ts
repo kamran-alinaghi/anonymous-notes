@@ -46,6 +46,10 @@ function failure<T = never>(code: RevealSessionErrorCode, message: string): Reve
   return { ok: false, error: { code, message } };
 }
 
+function isPausedByDisconnection(room: Room): boolean {
+  return room.pausedPhase != null && (room.disconnectedPlayerIds?.length ?? 0) > 0;
+}
+
 function currentRound(room: Room) {
   return room.currentRoundId === null
     ? undefined
@@ -97,6 +101,10 @@ export class RevealSessionService {
         operationError = failure("ROOM_UNAVAILABLE", "Reveal navigation is only available during REVEALING.");
         return undefined;
       }
+      if (isPausedByDisconnection(room)) {
+        operationError = failure("ROOM_UNAVAILABLE", "Reveal navigation is paused until every disconnected player reconnects.");
+        return undefined;
+      }
       if (room.host.id !== authenticatedHostId) {
         operationError = failure("UNAUTHORIZED", "Only the authenticated room host may navigate the reveal.");
         return undefined;
@@ -134,6 +142,9 @@ export class RevealSessionService {
     if (!room) return failure("ROOM_NOT_FOUND", "No active room exists with that code.");
     if (room.phase !== "REVEALING") {
       return failure("ROOM_UNAVAILABLE", "Reveal state is only available during REVEALING.");
+    }
+    if (isPausedByDisconnection(room)) {
+      return failure("ROOM_UNAVAILABLE", "Reveal state is paused until every disconnected player reconnects.");
     }
 
     if (viewer.role === "HOST") {
