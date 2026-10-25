@@ -89,8 +89,8 @@ export class WebSocketClient {
     this.createSocket = options.createSocket ?? ((url) => new WebSocket(url));
     this.tokenStorage = options.tokenStorage ?? createBrowserSessionTokenStorage();
     this.createRequestId = options.createRequestId ?? (() => crypto.randomUUID());
-    this.setTimer = options.setTimer ?? setTimeout;
-    this.clearTimer = options.clearTimer ?? clearTimeout;
+    this.setTimer = options.setTimer ?? globalThis.setTimeout.bind(globalThis);
+    this.clearTimer = options.clearTimer ?? globalThis.clearTimeout.bind(globalThis);
     this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
     this.reconnectBaseDelayMs = options.reconnectBaseDelayMs ?? 500;
     this.reconnectMaxDelayMs = options.reconnectMaxDelayMs ?? 10_000;
