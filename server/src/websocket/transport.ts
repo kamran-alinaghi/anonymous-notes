@@ -224,6 +224,55 @@ export class WebSocketTransport {
     this.broadcastLobby(room);
   }
 
+  private handleStartGame(socket: SessionConnection, session: ConnectionSession, requestId: string): void {
+    if (session.role !== "HOST" || !session.hostId || !session.roomCode) {
+      this.trySend(socket, safeError("UNAUTHORIZED", "Only the authenticated room host may start the game.", requestId));
+      return;
+    }
+    if (!this.gameManagement) {
+      this.trySend(socket, safeError("GAME_UNAVAILABLE", "Game management is unavailable.", requestId));
+      return;
+    }
+    const result = this.gameManagement.startGame(session.roomCode, session.hostId);
+    if (!result.ok) {
+      this.trySend(socket, safeError(result.error.code, result.error.message, requestId));
+      return;
+    }
+    this.trySend(socket, { type: "GAME_STARTED", requestId, room: gameRoomView(result.value) });
+    this.broadcastGameState(result.value);
+  }
+
+  private handleSetSubject(
+    socket: SessionConnection,
+    session: ConnectionSession,
+    requestId: string,
+    subject: string,
+  ): void {
+    if ((session.role !== "HOST" && session.role !== "PLAYER") || !session.playerId || !session.roomCode) {
+      this.trySend(socket, safeError("UNAUTHORIZED", "Only an authenticated actual player may submit a subject.", requestId));
+      return;
+    }
+    if (!this.gameManagement) {
+      this.trySend(socket, safeError("GAME_UNAVAILABLE", "Game management is unavailable.", requestId));
+      return;
+    }
+    const result = this.gameManagement.submitSubject(session.roomCode, session.playerId, subject);
+    if (!result.ok) {
+      this.trySend(socket, safeError(result.error.code, result.error.message, requestId));
+      return;
+    }
+    this.trySend(socket, { type: "SUBJECT_SUBMITTED", requestId, room: gameRoomView(result.value) });
+    this.broadcastGameState(result.value);
+  }
+
+  private broadcastGameState(room: Room): void {
+    const view = gameRoomView(room);
+    for (const [session, socket] of this.sessions.getConnectionsSnapshot()) {
+      if (session.roomCode !== room.code) continue;
+      this.trySend(socket, { type: "GAME_STATE_UPDATED", room: view });
+    }
+  }
+
   private broadcastLobby(room: Room): void {
     for (const [session, socket] of this.sessions.getConnectionsSnapshot()) {
       if (session.roomCode !== room.code) continue;
