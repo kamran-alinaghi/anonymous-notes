@@ -39,11 +39,24 @@ class Peer {
     this.socket.send(JSON.stringify(message));
   }
 
-  async nextMatching(predicate: (message: Message) => boolean): Promise<Message> {
+  async nextMatching(predicate: (message: Message) => boolean, label = "matching message"): Promise<Message> {
     for (;;) {
       const index = this.queue.findIndex(predicate);
       if (index >= 0) return this.queue.splice(index, 1)[0]!;
-      const message = await new Promise<Message>((resolve) => this.waiters.push(resolve));
+      let waiter!: (message: Message) => void;
+      const message = await Promise.race([
+        new Promise<Message>((resolve) => {
+          waiter = resolve;
+          this.waiters.push(resolve);
+        }),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            const index = this.waiters.indexOf(waiter);
+            if (index >= 0) this.waiters.splice(index, 1);
+            reject(new Error(`Timed out waiting for ${label}. Queued messages: ${this.queue.map((item) => item.type).join(", ") || "(none)"}`));
+          }, 5_000);
+        }),
+      ]);
       if (predicate(message)) return message;
       this.queue.push(message);
     }
@@ -108,8 +121,10 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
   }
 
   async function message(peer: Peer, type: string, requestId?: string): Promise<Message> {
-    return peer.nextMatching((item) =>
-      item.type === type && (requestId === undefined || item.requestId === requestId));
+    return peer.nextMatching(
+      (item) => item.type === type && (requestId === undefined || item.requestId === requestId),
+      `${type}${requestId ? ` requestId=${requestId}` : ""}`,
+    );
   }
 
   it.each(["SINGLE_DEVICE", "INDIVIDUAL_DEVICES"] as const)(
