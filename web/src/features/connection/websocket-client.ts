@@ -264,7 +264,7 @@ export class WebSocketClient {
       const token = message.sessionToken;
       if (typeof token === "string" && token.length > 0) {
         this.tokenStorage.write(token);
-        this.updateState({ sessionStatus: "restored" });
+        this.updateState({ status: "connected", sessionStatus: "restored", lastError: null });
       }
     }
 
