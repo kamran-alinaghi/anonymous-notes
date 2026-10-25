@@ -4,6 +4,7 @@ import { buildApp } from "../app.js";
 import { InMemoryRoomStore } from "../rooms/room-store.js";
 import { RoomManagementService } from "../rooms/room-management.js";
 import { LobbyManagementService } from "../lobby/lobby-management.js";
+import { GameManagementService } from "../game/game-management.js";
 
 type WireMessage = Record<string, unknown>;
 
@@ -72,10 +73,13 @@ describe("WebSocket transport integration", () => {
       generateId: () => `server-id-${++id}`,
     });
     const lobbyManagement = new LobbyManagementService(store);
+    let roundId = 0;
+    const gameManagement = new GameManagementService(store, { generateRoundId: () => "round-" + (++roundId) });
     let connectionId = 0;
     const serverApp = await buildApp({
       roomManagement,
       lobbyManagement,
+      gameManagement,
       generateConnectionId: () => `connection-${++connectionId}`,
     });
     app = serverApp;
@@ -248,6 +252,82 @@ describe("WebSocket transport integration", () => {
     expect(updateB.room).not.toHaveProperty("players");
     expect(updateA.room).toMatchObject({ playerCount: 2, viewerRole: "PLAYER" });
     expect(updateB.room).toMatchObject({ playerCount: 2, viewerRole: "PLAYER" });
+  });
+
+  it("starts a game, selects the first ordered player, and broadcasts subject changes", async () => {
+    const { peer } = await setup();
+    const host = peer();
+    const players = [peer(), peer(), peer()];
+    await Promise.all([connected(host), ...players.map(connected)]);
+
+    host.send({ type: "CREATE_ROOM", requestId: "game-create", revealMode: "INDIVIDUAL_DEVICES", hostNickname: "Host" });
+    expect((await host.nextMessage()).type).toBe("ROOM_CREATED");
+
+    for (let index = 0; index < players.length; index += 1) {
+      const player = players[index]!;
+      player.send({ type: "JOIN_ROOM", requestId: "game-join-" + index, roomCode: "AAAAAA", nickname: "Player" + (index + 1) });
+      expect((await player.nextMessage()).type).toBe("ROOM_JOINED");
+      expect((await player.nextMessage()).type).toBe("LOBBY_UPDATED");
+      expect((await host.nextMessage()).type).toBe("LOBBY_UPDATED");
+      for (let prior = 0; prior < index; prior += 1) {
+        expect((await players[prior]!.nextMessage()).type).toBe("LOBBY_UPDATED");
+      }
+    }
+
+    players[0]!.send({ type: "START_GAME", requestId: "unauthorized-start" });
+    expect(await players[0]!.nextMessage()).toMatchObject({
+      type: "ERROR",
+      requestId: "unauthorized-start",
+      error: { code: "UNAUTHORIZED" },
+    });
+
+    host.send({ type: "START_GAME", requestId: "start-game" });
+    expect(await host.nextMessage()).toMatchObject({
+      type: "GAME_STARTED",
+      requestId: "start-game",
+      room: {
+        phase: "CHOOSING_SUBJECT",
+        currentRoundNumber: 1,
+        currentSubjectSetterNickname: "Host",
+        subject: null,
+      },
+    });
+    expect((await host.nextMessage()).type).toBe("GAME_STATE_UPDATED");
+    for (const player of players) {
+      expect(await player.nextMessage()).toMatchObject({
+        type: "GAME_STATE_UPDATED",
+        room: { phase: "CHOOSING_SUBJECT", currentRoundNumber: 1, currentSubjectSetterNickname: "Host" },
+      });
+    }
+
+    players[0]!.send({ type: "SET_SUBJECT", requestId: "wrong-setter", subject: "Not allowed" });
+    expect(await players[0]!.nextMessage()).toMatchObject({
+      type: "ERROR",
+      requestId: "wrong-setter",
+      error: { code: "NOT_SUBJECT_SETTER" },
+    });
+
+    host.send({ type: "SET_SUBJECT", requestId: "set-subject", subject: "A mystery" });
+    expect(await host.nextMessage()).toMatchObject({
+      type: "SUBJECT_SUBMITTED",
+      requestId: "set-subject",
+      room: { phase: "WRITING", subject: "A mystery" },
+    });
+    expect((await host.nextMessage()).type).toBe("GAME_STATE_UPDATED");
+    for (const player of players) {
+      expect(await player.nextMessage()).toMatchObject({
+        type: "GAME_STATE_UPDATED",
+        room: { phase: "WRITING", subject: "A mystery" },
+      });
+    }
+
+    host.send({ type: "START_GAME", requestId: "duplicate-start" });
+    expect(await host.nextMessage()).toMatchObject({
+      type: "ERROR",
+      requestId: "duplicate-start",
+      error: { code: "ROOM_UNAVAILABLE" },
+    });
+    expect(host.messages).toHaveLength(0);
   });
 
   it("unregisters a disconnected connection without removing room membership", async () => {
