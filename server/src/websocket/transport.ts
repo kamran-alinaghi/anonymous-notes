@@ -367,7 +367,7 @@ export class WebSocketTransport {
         });
       }
     }
-    if (room.phase === "REVEALING" && !currentState?.value?.paused) this.broadcastRevealState(room.code);
+    if (room.phase === "REVEALING" && currentState?.ok && !currentState.value.paused) this.broadcastRevealState(room.code);
   }
 
   private handleDisconnect(socket: SessionConnection): void {
@@ -472,6 +472,7 @@ export class WebSocketTransport {
     }
     this.trySend(socket, { type: "GAME_STARTED", requestId, room: gameRoomView(result.value) });
     this.broadcastGameState(result.value);
+    this.broadcastConnectionState(result.value);
   }
 
   private handleSetSubject(
@@ -484,6 +485,7 @@ export class WebSocketTransport {
       this.trySend(socket, safeError("UNAUTHORIZED", "Only an authenticated actual player may submit a subject.", requestId));
       return;
     }
+    if (this.rejectIfPaused(socket, session, requestId)) return;
     if (!this.gameManagement) {
       this.trySend(socket, safeError("GAME_UNAVAILABLE", "Game management is unavailable.", requestId));
       return;
@@ -495,6 +497,7 @@ export class WebSocketTransport {
     }
     this.trySend(socket, { type: "SUBJECT_SUBMITTED", requestId, room: gameRoomView(result.value) });
     this.broadcastGameState(result.value);
+    this.broadcastConnectionState(result.value);
   }
 
   private broadcastGameState(room: Room): void {
@@ -531,7 +534,11 @@ export class WebSocketTransport {
       progress: submissionProgressView(result.value.progress, session.role === "HOST"),
     });
     this.broadcastSubmissionProgress(result.value.progress);
-    if (result.value.room.phase === "REVEALING") this.broadcastRevealState(result.value.room.code);
+    if (result.value.room.phase === "REVEALING") {
+      const state = this.connectionLifecycle?.getState(result.value.room.code);
+      if (state?.ok && state.value.paused) this.broadcastConnectionState(result.value.room);
+      else this.broadcastRevealState(result.value.room.code);
+    }
   }
 
   private handleGetRevealState(
@@ -543,6 +550,7 @@ export class WebSocketTransport {
       this.trySend(socket, safeError("UNAUTHORIZED", "An authenticated room member is required.", requestId));
       return;
     }
+    if (this.rejectIfPaused(socket, session, requestId)) return;
     if (!this.revealSession) {
       this.trySend(socket, safeError("REVEAL_UNAVAILABLE", "Reveal session is unavailable.", requestId));
       return;
@@ -570,6 +578,7 @@ export class WebSocketTransport {
       this.trySend(socket, safeError("UNAUTHORIZED", "Only the authenticated room host may navigate the reveal.", requestId));
       return;
     }
+    if (this.rejectIfPaused(socket, session, requestId)) return;
     if (!this.revealSession) {
       this.trySend(socket, safeError("REVEAL_UNAVAILABLE", "Reveal session is unavailable.", requestId));
       return;
@@ -592,12 +601,28 @@ export class WebSocketTransport {
     socket: SessionConnection,
     session: ConnectionSession,
     requestId: string,
-    action: "COMPLETE_ROUND" | "FINISH_GAME" | "START_NEXT_ROUND",
+    action: "COMPLETE_ROUND" | "FINISH_GAME" | "START_NEXT_ROUND" | "TERMINATE_GAME",
   ): void {
     if (session.role !== "HOST" || !session.hostId || !session.roomCode) {
       this.trySend(socket, safeError("UNAUTHORIZED", "Only the authenticated room host may change the game lifecycle.", requestId));
       return;
     }
+    if (action === "TERMINATE_GAME") {
+      if (!this.connectionLifecycle) {
+        this.trySend(socket, safeError("CONNECTION_LIFECYCLE_UNAVAILABLE", "Connection lifecycle management is unavailable.", requestId));
+        return;
+      }
+      const terminated = this.connectionLifecycle.terminateGame(session.roomCode, session.hostId);
+      if (!terminated.ok) {
+        this.trySend(socket, safeError(terminated.error.code, terminated.error.message, requestId));
+        return;
+      }
+      this.trySend(socket, { type: "GAME_TERMINATED", requestId, room: gameRoomView(terminated.value) });
+      this.broadcastGameState(terminated.value);
+      this.broadcastConnectionState(terminated.value);
+      return;
+    }
+    if (this.rejectIfPaused(socket, session, requestId)) return;
     if (!this.roundLifecycle) {
       this.trySend(socket, safeError("ROUND_LIFECYCLE_UNAVAILABLE", "Round lifecycle management is unavailable.", requestId));
       return;
@@ -621,6 +646,7 @@ export class WebSocketTransport {
         : { type: "NEXT_ROUND_STARTED" as const, requestId, room };
     this.trySend(socket, response);
     this.broadcastGameState(result.value);
+    this.broadcastConnectionState(result.value);
   }
 
   /** Every connection gets a viewer-specific projection; private contents are never room-broadcast. */
