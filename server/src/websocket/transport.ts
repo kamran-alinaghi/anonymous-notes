@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import type { FastifyBaseLogger } from "fastify";
 
 import type { Room } from "../domain/types.js";
 import type { ConnectionLifecycleService } from "../game/connection-lifecycle.js";
@@ -19,6 +20,17 @@ import { ConnectionSessions, type ConnectionSession, type SessionConnection } fr
 
 type ReconnectIdentity = Omit<ConnectionSession, "connectionId">;
 type ActiveIdentityConnection = { socket: SessionConnection; session: ConnectionSession };
+
+interface TransportRuntimeOptions {
+  maxConnections?: number;
+  maxMessagesPerMinute?: number;
+  logger?: FastifyBaseLogger;
+}
+
+interface MessageWindow {
+  startedAt: number;
+  count: number;
+}
 
 function publicRoomView(room: Room, isHost: boolean): PublicRoomView {
   const common = {
@@ -88,6 +100,8 @@ export class WebSocketTransport {
   private readonly credentialByIdentity = new Map<string, string>();
   private readonly activeByIdentity = new Map<string, ActiveIdentityConnection>();
   private readonly generateSessionToken: () => string;
+  private acceptingConnections = true;
+  private readonly messageWindows = new Map<string, MessageWindow>();
 
   constructor(
     private readonly roomManagement: RoomManagementService,
@@ -99,12 +113,53 @@ export class WebSocketTransport {
     private readonly roundLifecycle?: RoundLifecycleService,
     private readonly connectionLifecycle?: ConnectionLifecycleService,
     generateSessionToken: () => string = () => randomBytes(32).toString("hex"),
+    private readonly runtimeOptions: TransportRuntimeOptions = {},
   ) {
     this.sessions = new ConnectionSessions(generateConnectionId);
     this.generateSessionToken = generateSessionToken;
   }
 
+  get canAcceptConnection(): boolean {
+    return this.acceptingConnections && this.sessions.size < (this.runtimeOptions.maxConnections ?? 1000);
+  }
+
+  shutdown(): void {
+    if (!this.acceptingConnections) return;
+    this.acceptingConnections = false;
+    const connections = this.sessions.getConnectionsSnapshot();
+    for (const [session, socket] of connections) {
+      const key = this.identityKey(session);
+      if (key && this.activeByIdentity.get(key)?.socket === socket) this.activeByIdentity.delete(key);
+      try {
+        socket.close?.(1001, "Server shutting down");
+      } catch {
+        // Continue closing other sockets if one transport has already failed.
+      }
+      this.sessions.unregister(socket);
+    }
+    this.reconnectCredentials.clear();
+    this.credentialByIdentity.clear();
+    this.activeByIdentity.clear();
+    this.messageWindows.clear();
+    this.runtimeOptions.logger?.info(
+      { event: "websocket_shutdown", closedConnections: connections.length },
+      "WebSocket connections closed for shutdown",
+    );
+  }
+
   attach(socket: SessionConnection): void {
+    if (!this.acceptingConnections) {
+      socket.close?.(1012, "Server is shutting down");
+      return;
+    }
+    if (this.sessions.size >= (this.runtimeOptions.maxConnections ?? 1000)) {
+      this.runtimeOptions.logger?.warn(
+        { event: "websocket_connection_limit_reached", maxConnections: this.runtimeOptions.maxConnections ?? 1000 },
+        "WebSocket connection limit reached",
+      );
+      socket.close?.(1013, "Server is busy");
+      return;
+    }
     const session = this.sessions.register(socket);
     try {
       this.send(socket, { type: "CONNECTED", connectionId: session.connectionId });
@@ -113,6 +168,10 @@ export class WebSocketTransport {
       return;
     }
 
+    this.runtimeOptions.logger?.info(
+      { event: "websocket_connected", connectionId: session.connectionId },
+      "WebSocket connection established",
+    );
     socket.on("message", (data) => {
       void this.handleMessage(socket, data);
     });
@@ -132,8 +191,23 @@ export class WebSocketTransport {
     }
 
     try {
+      if (!this.consumeMessageBudget(session)) {
+        this.runtimeOptions.logger?.warn(
+          { event: "websocket_message_rate_limited", connectionId: session.connectionId },
+          "WebSocket message rate limit exceeded",
+        );
+        this.trySend(socket, safeError("MESSAGE_RATE_LIMITED", "Too many messages. This connection will be closed."));
+        socket.close?.(1008, "Message rate limit exceeded");
+        this.handleDisconnect(socket);
+        return;
+      }
+
       const parsed = parseIncomingMessage(data);
       if (!parsed.ok) {
+        this.runtimeOptions.logger?.warn(
+          { event: "websocket_message_rejected", connectionId: session.connectionId, code: parsed.code },
+          "WebSocket message rejected",
+        );
         this.trySend(socket, safeError(parsed.code, parsed.message, parsed.requestId));
         return;
       }
@@ -250,8 +324,24 @@ export class WebSocketTransport {
       });
       this.broadcastLobby(room);
     } catch {
+      this.runtimeOptions.logger?.error(
+        { event: "websocket_request_failed", connectionId: session.connectionId },
+        "WebSocket request failed",
+      );
       this.trySend(socket, safeError("INTERNAL_ERROR", "The request could not be processed."));
     }
+  }
+
+  private consumeMessageBudget(session: ConnectionSession): boolean {
+    const now = Date.now();
+    const window = this.messageWindows.get(session.connectionId);
+    const limit = this.runtimeOptions.maxMessagesPerMinute ?? 120;
+    if (!window || now - window.startedAt >= 60_000) {
+      this.messageWindows.set(session.connectionId, { startedAt: now, count: 1 });
+      return true;
+    }
+    window.count += 1;
+    return window.count <= limit;
   }
 
   private identityKey(identity: ReconnectIdentity): string | null {
@@ -354,6 +444,10 @@ export class WebSocketTransport {
       }
     }
 
+    this.runtimeOptions.logger?.info(
+      { event: "session_restored", connectionId: session.connectionId, roomCode: room.code, role: identity.role },
+      "WebSocket session restored",
+    );
     this.trySend(socket, {
       type: "SESSION_RESTORED",
       requestId,
@@ -402,6 +496,11 @@ export class WebSocketTransport {
     const isCurrent = active?.socket === socket && active.session === session;
     if (isCurrent && key) this.activeByIdentity.delete(key);
     this.sessions.unregister(socket);
+    this.messageWindows.delete(session.connectionId);
+    this.runtimeOptions.logger?.info(
+      { event: "websocket_disconnected", connectionId: session.connectionId, role: session.role, roomCode: session.roomCode },
+      "WebSocket connection closed",
+    );
 
     if (!isCurrent || !session.playerId || !session.roomCode || !session.roomId || !this.connectionLifecycle) return;
     const result = this.connectionLifecycle.markDisconnected(session.roomCode, session.roomId, session.playerId);
@@ -495,6 +594,10 @@ export class WebSocketTransport {
       return;
     }
     this.trySend(socket, { type: "GAME_STARTED", requestId, room: gameRoomView(result.value) });
+    this.runtimeOptions.logger?.info(
+      { event: "game_started", connectionId: session.connectionId, roomCode: result.value.code },
+      "Game started",
+    );
     this.broadcastGameState(result.value);
   }
 
@@ -639,6 +742,10 @@ export class WebSocketTransport {
         this.trySend(socket, safeError(terminated.error.code, terminated.error.message, requestId));
         return;
       }
+      this.runtimeOptions.logger?.info(
+        { event: "game_terminated", connectionId: session.connectionId, roomCode: terminated.value.code },
+        "Game terminated by host",
+      );
       this.trySend(socket, { type: "GAME_TERMINATED", requestId, room: gameRoomView(terminated.value) });
       this.broadcastGameState(terminated.value);
       this.broadcastConnectionState(terminated.value);
