@@ -69,6 +69,10 @@ export class ConnectionSessions {
     this.bySocket.delete(socket);
   }
 
+  getConnectionsSnapshot(): Array<[ConnectionSession, SessionConnection]> {
+    return [...this.byConnectionId.values()].map(({ session, socket }) => [session, socket]);
+  }
+
   get size(): number {
     return this.byConnectionId.size;
   }
