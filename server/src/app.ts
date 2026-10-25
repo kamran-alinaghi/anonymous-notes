@@ -4,6 +4,7 @@ import websocket from "@fastify/websocket";
 
 import { LobbyManagementService } from "./lobby/lobby-management.js";
 import { GameManagementService } from "./game/game-management.js";
+import { NoteSubmissionService } from "./notes/note-submission.js";
 import { InMemoryRoomStore } from "./rooms/room-store.js";
 import { RoomManagementService } from "./rooms/room-management.js";
 import { healthRoutes } from "./routes/health.js";
@@ -14,6 +15,7 @@ export interface AppOptions {
   roomManagement?: RoomManagementService;
   lobbyManagement?: LobbyManagementService;
   gameManagement?: GameManagementService;
+  noteSubmission?: NoteSubmissionService;
   generateConnectionId?: () => string;
 }
 
@@ -23,11 +25,13 @@ export async function buildApp(options: AppOptions = {}) {
   const roomManagement = options.roomManagement ?? new RoomManagementService(store);
   const lobbyManagement = options.lobbyManagement ?? new LobbyManagementService(store);
   const gameManagement = options.gameManagement ?? new GameManagementService(store);
+  const noteSubmission = options.noteSubmission ?? new NoteSubmissionService(store);
   const transport = new WebSocketTransport(
     roomManagement,
     options.generateConnectionId ?? randomUUID,
     lobbyManagement,
     gameManagement,
+    noteSubmission,
   );
 
   await app.register(websocket);
