@@ -36,6 +36,11 @@ describe("environment configuration", () => {
     expect(() => loadEnv({ PORT: port })).toThrow(/PORT/);
   });
 
+  it("rejects invalid host names", () => {
+    expect(() => loadEnv({ HOST: "invalid host name" })).toThrow(/HOST/);
+    expect(() => loadEnv({ HOST: "not_a_host" })).toThrow(/HOST/);
+  });
+
   it("requires explicit allowed origins in production", () => {
     expect(() => loadEnv({ NODE_ENV: "production" })).toThrow(/ALLOWED_ORIGINS/);
   });
