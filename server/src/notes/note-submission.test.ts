@@ -63,6 +63,22 @@ describe("NoteSubmissionService", () => {
       expect(round.revealSequence).toHaveLength(round.notes.length);
       expect(round.readerAssignments).toHaveLength(round.notes.length);
       expect(new Set(round.readerAssignments.map((item) => item.noteId)).size).toBe(round.notes.length);
+
+      const setterIndex = finalRoom.players.findIndex((player) => player.id === finalRoom.currentSubjectSetterPlayerId);
+      const readerOrder = [
+        ...finalRoom.players.slice(setterIndex),
+        ...finalRoom.players.slice(0, setterIndex),
+      ];
+      const readerByNote = new Map(round.readerAssignments.map((item) => [item.noteId, item.readerPlayerId]));
+      const readerPositions = round.revealSequence!.map((noteId) =>
+        readerOrder.findIndex((player) => player.id === readerByNote.get(noteId)));
+      expect(readerPositions[0]).toBe(0);
+      expect(readerPositions).toEqual([...readerPositions].sort((a, b) => a - b));
+      for (const note of round.notes) {
+        const readerId = readerByNote.get(note.id);
+        expect(readerId).not.toBe(note.authorPlayerId);
+        expect(readerId).not.toBe(note.targetPlayerId);
+      }
     },
   );
 
