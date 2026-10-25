@@ -101,8 +101,14 @@ describe("WebSocket message contracts", () => {
     expect(parseIncomingMessage({
       type: "SUBMIT_NOTE_BATCH",
       requestId: "notes-2",
-      notes: [{ targetPlayerId: "player-2", content: "x".repeat(1001) }],
-    })).toMatchObject({ ok: false, requestId: "notes-2", code: "MALFORMED_MESSAGE" });
+      notes: [{ targetPlayerId: "player-2", content: "  " + "x".repeat(1000) + "  " }],
+    })).toMatchObject({ ok: true });
+
+    expect(parseIncomingMessage({
+      type: "SUBMIT_NOTE_BATCH",
+      requestId: "notes-2-over-transport-limit",
+      notes: [{ targetPlayerId: "player-2", content: "x".repeat(10_001) }],
+    })).toMatchObject({ ok: false, requestId: "notes-2-over-transport-limit", code: "MALFORMED_MESSAGE" });
     expect(parseIncomingMessage({
       type: "SUBMIT_NOTE_BATCH",
       requestId: "notes-3",
