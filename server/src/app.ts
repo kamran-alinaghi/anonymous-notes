@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 
+import { LobbyManagementService } from "./lobby/lobby-management.js";
 import { InMemoryRoomStore } from "./rooms/room-store.js";
 import { RoomManagementService } from "./rooms/room-management.js";
 import { healthRoutes } from "./routes/health.js";
@@ -10,16 +11,19 @@ import { WebSocketTransport } from "./websocket/transport.js";
 
 export interface AppOptions {
   roomManagement?: RoomManagementService;
+  lobbyManagement?: LobbyManagementService;
   generateConnectionId?: () => string;
 }
 
 export async function buildApp(options: AppOptions = {}) {
   const app = Fastify({ logger: true });
-  const roomManagement = options.roomManagement ??
-    new RoomManagementService(new InMemoryRoomStore());
+  const store = new InMemoryRoomStore();
+  const roomManagement = options.roomManagement ?? new RoomManagementService(store);
+  const lobbyManagement = options.lobbyManagement ?? new LobbyManagementService(store);
   const transport = new WebSocketTransport(
     roomManagement,
     options.generateConnectionId ?? randomUUID,
+    lobbyManagement,
   );
 
   await app.register(websocket);
