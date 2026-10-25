@@ -151,10 +151,17 @@ describe("production-readiness controls", () => {
       }),
     });
     const address = await app.listen({ host: "127.0.0.1", port: 0 });
-    const socket = await openSocket(address.replace("http", "ws") + "/ws");
+    const socket = new WebSocket(address.replace("http", "ws") + "/ws");
     const messages: string[] = [];
+    socket.addEventListener("message", (event) => messages.push(String(event.data)));
     const connected = waitForMessage(socket, messages, (message) => message.includes('"type":"CONNECTED"'));
-    await connected;
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        socket.addEventListener("open", () => resolve(), { once: true });
+        socket.addEventListener("error", () => reject(new Error("WebSocket failed to open.")), { once: true });
+      }),
+      connected,
+    ]);
 
     const malformedResponse = waitForMessage(socket, messages, (message) => message.includes('"code":"MALFORMED_MESSAGE"'));
     socket.send("{invalid");
