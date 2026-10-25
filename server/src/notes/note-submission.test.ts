@@ -89,6 +89,18 @@ describe("NoteSubmissionService", () => {
     }
   });
 
+  it("accepts note text at the 1,000-character limit", () => {
+    const { notes, store, room } = setup();
+    const author = room.players[0]!;
+    const batch = batchFor(room, author.id);
+    batch[0] = { ...batch[0]!, content: "x".repeat(1000) };
+    const result = notes.submitBatch(room.code, author.id, batch);
+    expect(result.ok).toBe(true);
+    const stored = store.getByCode(room.code)!;
+    const round = stored.rounds.find((item) => item.id === stored.currentRoundId)!;
+    expect(round.notes.find((note) => note.authorPlayerId === author.id)?.content).toHaveLength(1000);
+  });
+
   it("rejects non-players and submissions outside WRITING", () => {
     const { notes, store, room, hostId } = setup("SINGLE_DEVICE");
     const before = store.getByCode(room.code);
@@ -146,6 +158,21 @@ describe("NoteSubmissionService", () => {
       ok: false,
       error: { code: "ROOM_UNAVAILABLE" },
     });
+  });
+
+  it("serializes duplicate submissions from the same player", async () => {
+    const { notes, store, room } = setup();
+    const author = room.players[0]!;
+    const batch = batchFor(room, author.id);
+    const results = await Promise.all([
+      Promise.resolve(notes.submitBatch(room.code, author.id, batch)),
+      Promise.resolve(notes.submitBatch(room.code, author.id, batch)),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toHaveLength(1);
+    const stored = store.getByCode(room.code)!;
+    const round = stored.rounds.find((item) => item.id === stored.currentRoundId)!;
+    expect(round.notes.filter((note) => note.authorPlayerId === author.id)).toHaveLength(room.players.length - 1);
   });
 
   it("handles concurrent final submissions without losing a batch or initializing reveal twice", async () => {
