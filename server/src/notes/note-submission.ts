@@ -101,6 +101,35 @@ export class NoteSubmissionService {
     this.generateNoteId = options.generateNoteId ?? randomUUID;
   }
 
+  private allPlayersConnectedAndSubmitted(room: Room): boolean {
+    if ((room.disconnectedPlayerIds?.length ?? 0) > 0) return false;
+    const round = currentRound(room);
+    if (!round) return false;
+    return room.players.every((player) =>
+      round.notes.filter((note) => note.authorPlayerId === player.id).length === room.players.length - 1);
+  }
+
+  private prepareReveal(room: Room): NoteSubmissionResult<Room> {
+    const transitioned = transitionRoom(room, "REVEALING");
+    if (!transitioned.ok) return failure("NOTE_SUBMISSION_FAILED", transitioned.errors.join(" "));
+    const revealStarted = beginReveal(transitioned.value);
+    if (!revealStarted.ok) return failure("NOTE_SUBMISSION_FAILED", revealStarted.errors.join(" "));
+    const revealRound = currentRound(revealStarted.value);
+    if (!revealRound) return failure("NOTE_SUBMISSION_FAILED", "The reveal round could not be initialized.");
+    const assignments = assignReaders(revealRound.notes, revealStarted.value.players);
+    if (!assignments.ok) return failure("NOTE_SUBMISSION_FAILED", assignments.errors.join(" "));
+    return {
+      ok: true,
+      value: {
+        ...revealStarted.value,
+        pausedPhase: (revealStarted.value.disconnectedPlayerIds?.length ?? 0) > 0 ? "REVEALING" : null,
+        rounds: revealStarted.value.rounds.map((item) => item.id === revealRound.id
+          ? { ...item, readerAssignments: assignments.value, revealIndex: 0 }
+          : item),
+      } as Room,
+    };
+  }
+
   submitBatch(
     roomCode: string,
     authenticatedPlayerId: string,
@@ -162,38 +191,13 @@ export class NoteSubmissionService {
           return undefined;
         }
         submittedNotes = validated.value.length;
-        const allSubmitted = accepted.value.players.every((player) =>
-          (currentRound(accepted.value)?.notes.filter((note) => note.authorPlayerId === player.id).length ?? 0)
-            === accepted.value.players.length - 1);
-        if (!allSubmitted) return accepted.value;
-
-        const transitioned = transitionRoom(accepted.value, "REVEALING");
-        if (!transitioned.ok) {
-          operationError = failure("NOTE_SUBMISSION_FAILED", transitioned.errors.join(" "));
+        if (!this.allPlayersConnectedAndSubmitted(accepted.value)) return accepted.value;
+        const reveal = this.prepareReveal(accepted.value);
+        if (!reveal.ok) {
+          operationError = reveal;
           return undefined;
         }
-        const revealStarted = beginReveal(transitioned.value);
-        if (!revealStarted.ok) {
-          operationError = failure("NOTE_SUBMISSION_FAILED", revealStarted.errors.join(" "));
-          return undefined;
-        }
-        const revealRound = currentRound(revealStarted.value);
-        if (!revealRound) {
-          operationError = failure("NOTE_SUBMISSION_FAILED", "The reveal round could not be initialized.");
-          return undefined;
-        }
-        const assignments = assignReaders(revealRound.notes, revealStarted.value.players);
-        if (!assignments.ok) {
-          operationError = failure("NOTE_SUBMISSION_FAILED", assignments.errors.join(" "));
-          return undefined;
-        }
-        return {
-          ...revealStarted.value,
-          pausedPhase: (revealStarted.value.disconnectedPlayerIds?.length ?? 0) > 0 ? "REVEALING" : null,
-          rounds: revealStarted.value.rounds.map((item) => item.id === revealRound.id
-            ? { ...item, readerAssignments: assignments.value, revealIndex: 0 }
-            : item),
-        } as Room;
+        return reveal.value;
       });
 
       if (!updated) {
@@ -214,6 +218,41 @@ export class NoteSubmissionService {
     } catch {
       return failure("NOTE_SUBMISSION_FAILED", "The note batch was rejected; existing state was preserved.");
     }
+  }
+
+  /** Completes a deferred WRITING -> REVEALING transition after the last disconnected player returns. */
+  finalizeIfReady(
+    roomCode: string,
+  ): NoteSubmissionResult<{ room: Room; progress: NoteSubmissionProgress; transitioned: boolean }> {
+    const current = this.store.getByCode(roomCode);
+    if (!current) return failure("ROOM_NOT_FOUND", "No active room exists with that code.");
+    if (current.phase !== "WRITING" || !this.allPlayersConnectedAndSubmitted(current)) {
+      const progress = progressFor(current);
+      if (!progress) return failure("NOTE_SUBMISSION_FAILED", "There is no current round.");
+      return { ok: true, value: { room: current, progress, transitioned: false } };
+    }
+
+    let operationError: NoteSubmissionResult<never> | undefined;
+    const updated = this.store.updateIfPresent(roomCode, (room) => {
+      if (room.phase !== "WRITING" || !this.allPlayersConnectedAndSubmitted(room)) return undefined;
+      const reveal = this.prepareReveal(room);
+      if (!reveal.ok) {
+        operationError = reveal;
+        return undefined;
+      }
+      return reveal.value;
+    });
+    if (!updated) {
+      if (operationError) return operationError;
+      const latest = this.store.getByCode(roomCode);
+      if (!latest) return failure("ROOM_NOT_FOUND", "No active room exists with that code.");
+      const progress = progressFor(latest);
+      if (!progress) return failure("NOTE_SUBMISSION_FAILED", "There is no current round.");
+      return { ok: true, value: { room: latest, progress, transitioned: false } };
+    }
+    const progress = progressFor(updated);
+    if (!progress) return failure("NOTE_SUBMISSION_FAILED", "Submission status could not be calculated.");
+    return { ok: true, value: { room: updated, progress, transitioned: true } };
   }
 
   getProgress(roomCode: string): NoteSubmissionResult<NoteSubmissionProgress> {
