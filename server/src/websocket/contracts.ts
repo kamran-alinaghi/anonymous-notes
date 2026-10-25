@@ -1,6 +1,6 @@
 import type { GamePhase, RevealMode } from "../domain/types.js";
 
-export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT"] as const;
+export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT", "SUBMIT_NOTE_BATCH"] as const;
 export type IncomingMessageType = (typeof INCOMING_MESSAGE_TYPES)[number];
 
 export interface CreateRoomRequest {
@@ -34,12 +34,19 @@ export interface SetSubjectRequest {
   subject: string;
 }
 
+export interface SubmitNoteBatchRequest {
+  type: "SUBMIT_NOTE_BATCH";
+  requestId: string;
+  notes: Array<{ targetPlayerId: string; content: string }>;
+}
+
 export type IncomingMessage =
   | CreateRoomRequest
   | JoinRoomRequest
   | ReorderPlayersRequest
   | StartGameRequest
-  | SetSubjectRequest;
+  | SetSubjectRequest
+  | SubmitNoteBatchRequest;
 
 export interface HostLobbyRoomView {
   roomCode: string;
@@ -73,6 +80,27 @@ export interface GameRoomView {
   subject: string | null;
 }
 
+export interface HostSubmissionProgressView {
+  roomCode: string;
+  phase: GamePhase;
+  roundNumber: number;
+  submittedCount: number;
+  totalPlayerCount: number;
+  viewerRole: "HOST";
+  players: Array<{ playerId: string; nickname: string; submitted: boolean }>;
+}
+
+export interface PlayerSubmissionProgressView {
+  roomCode: string;
+  phase: GamePhase;
+  roundNumber: number;
+  submittedCount: number;
+  totalPlayerCount: number;
+  viewerRole: "PLAYER";
+}
+
+export type SubmissionProgressView = HostSubmissionProgressView | PlayerSubmissionProgressView;
+
 export type OutgoingMessage =
   | { type: "CONNECTED"; connectionId: string }
   | { type: "ROOM_CREATED"; requestId: string; room: PublicRoomView; sessionRole: "HOST" | "PLAYER"; nickname: string }
@@ -82,6 +110,8 @@ export type OutgoingMessage =
   | { type: "GAME_STARTED"; requestId: string; room: GameRoomView }
   | { type: "SUBJECT_SUBMITTED"; requestId: string; room: GameRoomView }
   | { type: "GAME_STATE_UPDATED"; room: GameRoomView }
+  | { type: "NOTE_BATCH_ACCEPTED"; requestId: string; submittedNotes: number; progress: SubmissionProgressView }
+  | { type: "SUBMISSION_PROGRESS_UPDATED"; progress: SubmissionProgressView }
   | { type: "ERROR"; requestId?: string; error: { code: string; message: string } };
 
 export type MessageParseResult =
@@ -163,8 +193,25 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
     return { ok: true, message: { type: "START_GAME", requestId } };
   }
 
-  if (typeof value.subject !== "string" || value.subject.length > 10_000) {
-    return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "SET_SUBJECT requires subject text." };
+  if (value.type === "SET_SUBJECT") {
+    if (typeof value.subject !== "string" || value.subject.length > 10_000) {
+      return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "SET_SUBJECT requires subject text." };
+    }
+    return { ok: true, message: { type: "SET_SUBJECT", requestId, subject: value.subject } };
   }
-  return { ok: true, message: { type: "SET_SUBJECT", requestId, subject: value.subject } };
+
+  if (!Array.isArray(value.notes) || value.notes.length > 100 ||
+      value.notes.some((note) => !isRecord(note) ||
+        !isString(note.targetPlayerId, 128) ||
+        typeof note.content !== "string" || note.content.length > 1000)) {
+    return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "SUBMIT_NOTE_BATCH requires notes with targetPlayerId and content." };
+  }
+  return {
+    ok: true,
+    message: {
+      type: "SUBMIT_NOTE_BATCH",
+      requestId,
+      notes: value.notes as Array<{ targetPlayerId: string; content: string }>,
+    },
+  };
 }
