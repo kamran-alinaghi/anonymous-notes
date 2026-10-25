@@ -805,3 +805,102 @@ h1 span {
   font-size: 0.85rem;
   line-height: 1.5;
 }
+
+
+.reveal-card {
+  display: grid;
+  gap: 18px;
+  margin: 10px 0 20px;
+  padding: 20px;
+  border: 1px solid rgb(199 186 255 / 22%);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgb(155 137 255 / 8%), rgb(255 255 255 / 2%));
+}
+
+.reveal-position {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgb(255 255 255 / 9%);
+}
+
+.reveal-position > span,
+.reveal-recipient {
+  color: #aaa1d7;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+}
+
+.reveal-position strong {
+  color: #e5dfff;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.reveal-position i {
+  color: #777b8d;
+  font-style: normal;
+  padding: 0 3px;
+}
+
+.revealed-note {
+  display: grid;
+  gap: 10px;
+  min-height: 110px;
+  align-content: center;
+}
+
+.reveal-recipient {
+  margin: 0;
+}
+
+.revealed-note-content {
+  margin: 0;
+  color: #f4f1ff;
+  font-size: 1.2rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.reveal-waiting {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  min-height: 110px;
+  align-content: center;
+  color: #d7d1ed;
+  text-align: center;
+}
+
+.reveal-waiting strong {
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.reveal-waiting > span:last-child {
+  color: #9397a9;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.reveal-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.reveal-controls .secondary-button,
+.reveal-controls .primary-button {
+  min-width: 0;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 380px) {
+  .reveal-controls {
+    grid-template-columns: 1fr;
+  }
+}
