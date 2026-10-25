@@ -140,8 +140,14 @@ export class RevealSessionService {
       if (!viewer.hostId || viewer.hostId !== room.host.id) {
         return failure("UNAUTHORIZED", "The authenticated room host is required.");
       }
+      if (room.revealMode === "SINGLE_DEVICE" && viewer.playerId !== null) {
+        return failure("UNAUTHORIZED", "The SINGLE_DEVICE host is not an actual player.");
+      }
+      if (room.revealMode === "INDIVIDUAL_DEVICES" && viewer.playerId !== room.host.id) {
+        return failure("UNAUTHORIZED", "The INDIVIDUAL_DEVICES host identity must match its player identity.");
+      }
     } else {
-      if (!viewer.playerId || !room.players.some((player) => player.id === viewer.playerId)) {
+      if (viewer.hostId !== null || !viewer.playerId || !room.players.some((player) => player.id === viewer.playerId)) {
         return failure("UNAUTHORIZED", "An authenticated room player is required.");
       }
       if (room.revealMode === "SINGLE_DEVICE") {
