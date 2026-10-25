@@ -70,6 +70,10 @@ interface RoomBase {
   currentRoundId: RoundId | null;
   /** Player allowed to set the current round's subject. */
   currentSubjectSetterPlayerId: PlayerId | null;
+  /** Player identities with no active WebSocket connection. */
+  disconnectedPlayerIds?: PlayerId[];
+  /** Original active phase retained while progression waits for reconnection. */
+  pausedPhase?: GamePhase | null;
 }
 
 export interface SingleDeviceRoom extends RoomBase {
