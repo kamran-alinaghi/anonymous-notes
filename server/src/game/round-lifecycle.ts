@@ -39,9 +39,11 @@ function currentRound(room: Room): Round | undefined {
 function closeRevealSession(room: Room, roundId: string): Room {
   return {
     ...room,
-    rounds: room.rounds.map((round) => round.id === roundId
-      ? { ...round, revealSequence: null, revealIndex: undefined, readerAssignments: [] }
-      : round),
+    rounds: room.rounds.map((round) => {
+      if (round.id !== roundId) return round;
+      const { revealIndex: _revealIndex, ...roundWithoutRevealIndex } = round;
+      return { ...roundWithoutRevealIndex, revealSequence: null, readerAssignments: [] };
+    }),
   } as Room;
 }
 
