@@ -4,6 +4,7 @@ import {
   assignReaders,
   beginReveal,
   createRevealSequence,
+  orderRevealSequence,
   projectNoteForPlayer,
   setCurrentSubject,
   submitNoteBatch,
@@ -211,23 +212,36 @@ describe("reveal sequence and privacy", () => {
     { kind: "INTERNAL_NOTE", id: "n4", authorPlayerId: "p4", targetPlayerId: "p1", content: "four" },
   ];
 
-  it("uses Fisher–Yates output and includes every note exactly once", () => {
-    const sequence = createRevealSequence(notes, () => 0);
-    expect(sequence).toEqual(["n2", "n3", "n4", "n1"]);
+  it("preserves stable note order instead of shuffling notes randomly", () => {
+    const sequence = createRevealSequence(notes);
+    expect(sequence).toEqual(["n1", "n2", "n3", "n4"]);
     expect([...sequence].sort()).toEqual(["n1", "n2", "n3", "n4"]);
   });
 
   it("stores reveal order once and preserves it during active reveal", () => {
     const room = withNotes(notes);
-    const first = beginReveal(room, () => 0.1);
+    const first = beginReveal(room);
     expect(first.ok).toBe(true);
     if (!first.ok) return;
     const sequence = first.value.rounds[0]?.revealSequence;
-    const random = vi.fn(() => 0.9);
-    const second = beginReveal(first.value, random);
+    const second = beginReveal(first.value);
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.value.rounds[0]?.revealSequence).toEqual(sequence);
-    expect(random).not.toHaveBeenCalled();
+  });
+
+  it("orders notes by the defined reader order, starting with the subject setter", () => {
+    const assignments = [
+      { noteId: "n1", readerPlayerId: "p2" },
+      { noteId: "n2", readerPlayerId: "p1" },
+      { noteId: "n3", readerPlayerId: "p3" },
+      { noteId: "n4", readerPlayerId: "p2" },
+    ];
+    expect(orderRevealSequence(notes, assignments, [
+      { id: "p2", nickname: "Blair" },
+      { id: "p3", nickname: "Casey" },
+      { id: "p4", nickname: "Drew" },
+      { id: "p1", nickname: "Alex" },
+    ])).toEqual(["n1", "n4", "n3", "n2"]);
   });
 
   it("projects notes without author or target fields", () => {
@@ -247,7 +261,7 @@ describe("reader assignment", () => {
       targetPlayerId: players[(index + 1) % 4]!.id,
       content: "content",
     }));
-    const result = assignReaders(manyNotes, players, () => 0.25);
+    const result = assignReaders(manyNotes, players);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const counts = new Map<string, number>();
@@ -269,6 +283,6 @@ describe("reader assignment", () => {
       targetPlayerId: "p2",
       content: "x",
     };
-    expect(assignReaders([note], players.slice(0, 2), () => 0).ok).toBe(false);
+    expect(assignReaders([note], players.slice(0, 2)).ok).toBe(false);
   });
 });
