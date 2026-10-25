@@ -280,6 +280,10 @@ export class WebSocketTransport {
           return;
         }
 
+        this.runtimeOptions.logger?.info(
+          { event: "room_created", connectionId: session.connectionId, roomCode: room.code, revealMode: room.revealMode },
+          "Room created",
+        );
         this.trySend(socket, {
           type: "ROOM_CREATED",
           requestId: parsed.message.requestId,
@@ -314,6 +318,10 @@ export class WebSocketTransport {
         return;
       }
 
+      this.runtimeOptions.logger?.info(
+        { event: "player_joined", connectionId: session.connectionId, roomCode: room.code, playerId: player.id },
+        "Player joined room",
+      );
       this.trySend(socket, {
         type: "ROOM_JOINED",
         requestId: parsed.message.requestId,
@@ -767,6 +775,10 @@ export class WebSocketTransport {
       return;
     }
 
+    this.runtimeOptions.logger?.info(
+      { event: "game_lifecycle_transition", connectionId: session.connectionId, roomCode: result.value.code, action, phase: result.value.phase },
+      "Game lifecycle transition completed",
+    );
     const room = gameRoomView(result.value);
     const response = action === "COMPLETE_ROUND"
       ? { type: "ROUND_COMPLETED" as const, requestId, room }
