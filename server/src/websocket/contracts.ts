@@ -100,6 +100,8 @@ export interface GameRoomView {
   phase: GamePhase;
   hostNickname: string;
   playerCount: number;
+  /** Safe recipient list for authenticated room members; contains no note metadata. */
+  players: Array<{ id: string; nickname: string }>;
   currentRoundNumber: number;
   currentSubjectSetterNickname: string | null;
   subject: string | null;
