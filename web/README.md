@@ -29,6 +29,8 @@ npm run verify
 
 ## Current scope
 
-This commit establishes the application shell, responsive styling, strict TypeScript configuration, and a smoke test. It does not connect to the backend yet. The next step is the typed WebSocket client and connection/session state, followed by create/join room and lobby flows.
+The app shell and the typed WebSocket connection/session client are in place. The client waits for the server's `CONNECTED` handshake, correlates requests by `requestId`, stores server-issued reconnect credentials in `sessionStorage`, rotates credentials after successful restoration, and retries dropped connections with bounded exponential backoff. If restoration fails, it clears the stale credential and requires the user to choose their next action; it never creates a replacement identity automatically.
 
-Do not store session tokens in URLs, logs, or analytics. The connection implementation will keep session credentials in session-scoped browser storage and handle server-issued token rotation during reconnect.
+The connection client is not yet wired into the visible app shell. The next step is the create/join room flow and lobby UI.
+
+Do not store session tokens in URLs, logs, or analytics. The server keeps room and reconnect state in memory, so a server restart invalidates active sessions.
