@@ -4,6 +4,8 @@ import {
   type GameRoomView,
   type PublicRoomView,
   type RevealMode,
+  type RevealStateView,
+  type RevealNavigationAction,
   type ServerMessage,
   type SessionRestoredMessage,
   type SubmissionProgressView,
@@ -92,6 +94,7 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
   const [lobby, setLobby] = useState<LobbyState | null>(null);
   const [gameRoom, setGameRoom] = useState<GameRoomView | null>(null);
   const [submissionProgress, setSubmissionProgress] = useState<SubmissionProgressView | null>(null);
+  const [revealState, setRevealState] = useState<RevealStateView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -166,6 +169,16 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
       return;
     }
 
+    if ((message.type === "REVEAL_STATE" || message.type === "REVEAL_STATE_UPDATED") &&
+      typeof message.state === "object" && message.state !== null) {
+      setRevealState(message.state as RevealStateView);
+      return;
+    }
+
+    if (message.type === "REVEAL_NAVIGATED") {
+      return;
+    }
+
     if ((message.type === "NOTE_BATCH_ACCEPTED" || message.type === "SUBMISSION_PROGRESS_UPDATED") &&
       typeof message.progress === "object" && message.progress !== null) {
       const progress = message.progress as SubmissionProgressView;
@@ -193,7 +206,7 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
       const serverError = message.error as { message?: unknown };
       if (typeof serverError.message === "string") setError(serverError.message);
     }
-  }, []);
+  }, [client]);
 
   useEffect(() => {
     const unsubscribe = client.subscribe(handleMessage);
@@ -203,6 +216,23 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
       client.disconnect();
     };
   }, [client, handleMessage]);
+
+  useEffect(() => {
+    if (gameRoom?.phase !== "REVEALING") {
+      setRevealState(null);
+      return;
+    }
+    // In SINGLE_DEVICE mode only the host is authorized to read reveal state.
+    if (gameRoom.revealMode === "SINGLE_DEVICE" && lobby?.viewerRole !== "HOST") return;
+
+    void client.request({ type: "GET_REVEAL_STATE" }).then((message) => {
+      if (message.type === "REVEAL_STATE" && typeof message.state === "object" && message.state !== null) {
+        setRevealState(message.state as RevealStateView);
+      }
+    }).catch((requestError) => {
+      setError(requestError instanceof Error ? requestError.message : "Could not load the reveal state.");
+    });
+  }, [client, gameRoom?.phase, gameRoom?.revealMode, lobby?.viewerRole]);
 
   const createRoom = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -314,6 +344,18 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
       const message = requestError instanceof Error ? requestError.message : "Could not submit your notes.";
       setError(message);
       throw new Error(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const navigateReveal = async (action: RevealNavigationAction) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await client.request({ type: "NAVIGATE_REVEAL", action });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not navigate the reveal.");
     } finally {
       setBusy(false);
     }
@@ -457,9 +499,11 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
             nickname={lobby.nickname}
             viewerRole={lobby.viewerRole}
             progress={submissionProgress}
+            revealState={revealState}
             busy={busy}
             onSetSubject={setSubject}
             onSubmitBatch={submitNoteBatch}
+            onNavigateReveal={navigateReveal}
           />
         )}
 
