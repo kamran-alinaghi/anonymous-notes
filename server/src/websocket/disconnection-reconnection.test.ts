@@ -44,19 +44,22 @@ class Peer {
       const index = this.queue.findIndex(predicate);
       if (index >= 0) return this.queue.splice(index, 1)[0]!;
       let waiter!: (message: Message) => void;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const message = await Promise.race([
         new Promise<Message>((resolve) => {
           waiter = resolve;
           this.waiters.push(resolve);
         }),
         new Promise<never>((_, reject) => {
-          setTimeout(() => {
+          timeout = setTimeout(() => {
             const index = this.waiters.indexOf(waiter);
             if (index >= 0) this.waiters.splice(index, 1);
             reject(new Error(`Timed out waiting for ${label}. Queued messages: ${this.queue.map((item) => item.type).join(", ") || "(none)"}`));
           }, 5_000);
         }),
-      ]);
+      ]).finally(() => {
+        if (timeout !== undefined) clearTimeout(timeout);
+      });
       if (predicate(message)) return message;
       this.queue.push(message);
     }
