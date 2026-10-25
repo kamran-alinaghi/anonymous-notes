@@ -142,8 +142,21 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
       await message(host, "GAME_STARTED", "start");
       expect(store.getByCode("EAEAAA")?.phase).toBe("CHOOSING_SUBJECT");
 
-      // Two simultaneous disconnects pause subject selection and identify both players.
+      // A valid bearer credential cannot take over an identity that is still connected.
       const choosingDisconnects = actualPlayers.slice(1, 3);
+      const impersonationAttempt = peer();
+      await connect(impersonationAttempt);
+      impersonationAttempt.send({
+        type: "RECONNECT",
+        requestId: "reconnect-while-active",
+        sessionToken: tokens.get(choosingDisconnects[0]!.nickname),
+      });
+      await expect(message(impersonationAttempt, "ERROR", "reconnect-while-active")).resolves.toMatchObject({
+        error: { code: "SESSION_ALREADY_CONNECTED" },
+      });
+      await impersonationAttempt.closeAndWait();
+
+      // Two simultaneous disconnects pause subject selection and identify both players.
       for (const player of choosingDisconnects) await clients.get(player.nickname)!.closeAndWait();
       const waiting = await host.nextMatching((item) =>
         item.type === "WAITING_FOR_PLAYERS" &&
