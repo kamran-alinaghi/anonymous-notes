@@ -6,6 +6,7 @@ import { RoomManagementService } from "../rooms/room-management.js";
 import { LobbyManagementService } from "../lobby/lobby-management.js";
 import { GameManagementService } from "../game/game-management.js";
 import { RoundLifecycleService } from "../game/round-lifecycle.js";
+import { ConnectionLifecycleService } from "../game/connection-lifecycle.js";
 import { NoteSubmissionService } from "../notes/note-submission.js";
 import { RevealSessionService } from "../reveal/reveal-session.js";
 
@@ -86,6 +87,7 @@ describe("WebSocket transport integration", () => {
     let noteId = 0;
     const noteSubmission = new NoteSubmissionService(store, { generateNoteId: () => "note-" + (++noteId) });
     const revealSession = new RevealSessionService(store);
+    const connectionLifecycle = new ConnectionLifecycleService(store);
     const roundLifecycle = new RoundLifecycleService(store, { generateRoundId: () => "lifecycle-round-" + (++roundId) });
     let connectionId = 0;
     const serverApp = await buildApp({
@@ -95,6 +97,7 @@ describe("WebSocket transport integration", () => {
       noteSubmission,
       revealSession,
       roundLifecycle,
+      connectionLifecycle,
       generateConnectionId: () => `connection-${++connectionId}`,
     });
     app = serverApp;
