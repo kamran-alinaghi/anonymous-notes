@@ -142,6 +142,8 @@ export class RoomManagementService {
             rounds: [],
             currentRoundId: null,
             currentSubjectSetterPlayerId: null,
+            disconnectedPlayerIds: [],
+            pausedPhase: null,
           };
         } else {
           const host: Player = { id: hostId, nickname: hostNickname };
@@ -155,6 +157,8 @@ export class RoomManagementService {
             rounds: [],
             currentRoundId: null,
             currentSubjectSetterPlayerId: null,
+            disconnectedPlayerIds: [],
+            pausedPhase: null,
           };
         }
 
