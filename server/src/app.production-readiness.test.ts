@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import Fastify from "fastify";
+import type { AddressInfo } from "node:net";
 import { buildApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 
@@ -43,6 +45,21 @@ describe("production-readiness controls", () => {
     if (app) {
       await app.close();
       app = undefined;
+    }
+  });
+
+  it("surfaces a startup bind failure and permits resource cleanup", async () => {
+    const blocker = Fastify({ logger: false });
+    await blocker.listen({ host: "127.0.0.1", port: 0 });
+    const port = (blocker.server.address() as AddressInfo).port;
+
+    try {
+      app = await buildApp({ config: loadEnv({ NODE_ENV: "test", LOG_LEVEL: "silent" }) });
+      await expect(app.listen({ host: "127.0.0.1", port })).rejects.toThrow();
+      await app.close();
+      app = undefined;
+    } finally {
+      await blocker.close();
     }
   });
 
