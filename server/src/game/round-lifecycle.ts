@@ -31,7 +31,8 @@ function failure<T = never>(code: RoundLifecycleErrorCode, message: string): Rou
 }
 
 function isPausedByDisconnection(room: Room): boolean {
-  return room.pausedPhase != null && (room.disconnectedPlayerIds?.length ?? 0) > 0;
+  return ["CHOOSING_SUBJECT", "REVEALING", "ROUND_COMPLETE"].includes(room.phase) &&
+    (room.disconnectedPlayerIds?.length ?? 0) > 0;
 }
 
 function currentRound(room: Room): Round | undefined {
