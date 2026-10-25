@@ -151,7 +151,7 @@ export class GameManagementService {
     if (current.phase !== "CHOOSING_SUBJECT") {
       return failure("ROOM_UNAVAILABLE", "A subject can only be submitted during CHOOSING_SUBJECT.");
     }
-    if (current.pausedPhase && (current.disconnectedPlayerIds?.length ?? 0) > 0) {
+    if ((current.disconnectedPlayerIds?.length ?? 0) > 0) {
       return failure("ROOM_UNAVAILABLE", "The game is paused until every disconnected player reconnects.");
     }
     if (current.currentSubjectSetterPlayerId !== authenticatedPlayerId) {
@@ -168,7 +168,7 @@ export class GameManagementService {
           operationError = failure("ROOM_UNAVAILABLE", "A subject can only be submitted during CHOOSING_SUBJECT.");
           return undefined;
         }
-        if (room.pausedPhase && (room.disconnectedPlayerIds?.length ?? 0) > 0) {
+        if ((room.disconnectedPlayerIds?.length ?? 0) > 0) {
           operationError = failure("ROOM_UNAVAILABLE", "The game is paused until every disconnected player reconnects.");
           return undefined;
         }
