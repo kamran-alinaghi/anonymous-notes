@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "kam-run": "npm test && npm run typecheck && npm run dev",
+    "kam-run": "npm test && npm run typecheck && npm run build",
     "build": "tsc"
   },
   "keywords": [],
