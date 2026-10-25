@@ -64,7 +64,7 @@ The GitHub Actions workflow runs install, verification, and the production depen
 
 ## Production startup
 
-Set production variables in the deployment environment. At minimum, set `NODE_ENV=production`, `HOST`, `PORT`, and `ALLOWED_ORIGINS`. For example:
+Set production variables in the deployment environment. `NODE_ENV=production` and `ALLOWED_ORIGINS` are required; explicitly set `HOST` and `PORT` for the intended deployment bind address. For example:
 
 ```bash
 NODE_ENV=production HOST=0.0.0.0 PORT=3000 ALLOWED_ORIGINS=https://your-frontend.example npm run build
