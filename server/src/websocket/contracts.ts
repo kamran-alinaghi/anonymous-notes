@@ -270,7 +270,7 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
   if (!Array.isArray(value.notes) || value.notes.length > 100 ||
       value.notes.some((note) => !isRecord(note) ||
         !isString(note.targetPlayerId, 128) ||
-        typeof note.content !== "string" || note.content.length > 1000)) {
+        typeof note.content !== "string" || note.content.length > 10_000)) {
     return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "SUBMIT_NOTE_BATCH requires notes with targetPlayerId and content." };
   }
   return {
