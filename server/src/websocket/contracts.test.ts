@@ -62,6 +62,11 @@ describe("WebSocket message contracts", () => {
     });
     expect(parseIncomingMessage({
       type: "REORDER_PLAYERS",
+      requestId: "order-over-100",
+      playerIds: Array.from({ length: 101 }, (_, index) => `player-${index}`),
+    })).toMatchObject({ ok: true });
+    expect(parseIncomingMessage({
+      type: "REORDER_PLAYERS",
       requestId: "order-2",
       playerIds: ["p1", 7],
     })).toMatchObject({ ok: false, requestId: "order-2", code: "MALFORMED_MESSAGE" });
@@ -102,6 +107,14 @@ describe("WebSocket message contracts", () => {
       type: "SUBMIT_NOTE_BATCH",
       requestId: "notes-2",
       notes: [{ targetPlayerId: "player-2", content: "  " + "x".repeat(1000) + "  " }],
+    })).toMatchObject({ ok: true });
+    expect(parseIncomingMessage({
+      type: "SUBMIT_NOTE_BATCH",
+      requestId: "notes-over-100",
+      notes: Array.from({ length: 101 }, (_, index) => ({
+        targetPlayerId: `player-${index}`,
+        content: "Note",
+      })),
     })).toMatchObject({ ok: true });
 
     expect(parseIncomingMessage({
