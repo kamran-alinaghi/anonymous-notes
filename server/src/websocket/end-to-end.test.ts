@@ -66,7 +66,9 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
   const peers: WebSocketPeer[] = [];
 
   afterEach(async () => {
-    await Promise.all(peers.splice(0).map((peer) => peer.closeAndWait()));
+    const closingPeers = peers.splice(0);
+    await Promise.all(closingPeers.map((peer) => peer.closeAndWait()));
+    expect(closingPeers.every((peer) => peer.socket.readyState === WebSocket.CLOSED)).toBe(true);
     if (app) {
       await app.close();
       app = undefined;
@@ -601,8 +603,16 @@ function verifyRevealStates(
       if (isAssignedReader) expect(state.displayNote).toEqual({ content: note!.content });
     }
     const serialized = JSON.stringify(message);
+    const author = currentRoom.players.find((player) => player.id === note!.authorPlayerId)!;
+    expect(Object.keys(state).sort()).toEqual(
+      (hasDisplayNote
+        ? ["roomCode", "revealMode", "phase", "position", "total", "displayNote"]
+        : ["roomCode", "revealMode", "phase", "position", "total"]).sort(),
+    );
     expect(serialized).not.toContain("authorPlayerId");
     expect(serialized).not.toContain("targetPlayerId");
+    expect(serialized).not.toContain(note!.authorPlayerId);
+    expect(serialized).not.toContain(author.nickname);
     expect(serialized).not.toContain("authorNickname");
   }
 }
