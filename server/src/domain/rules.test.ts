@@ -105,7 +105,7 @@ describe("subject setting", () => {
     expect(validateSubject("Topic").ok).toBe(true);
     expect(validateSubject("x".repeat(300)).ok).toBe(true);
     expect(validateSubject("  Topic \n")).toMatchObject({ ok: true, value: "Topic" });
-    expect(validateSubject(" ".repeat(10) + "x".repeat(300) + " ".repeat(10)).toMatchObject({
+    expect(validateSubject(" ".repeat(10) + "x".repeat(300) + " ".repeat(10))).toMatchObject({
       ok: true,
       value: "x".repeat(300),
     });
