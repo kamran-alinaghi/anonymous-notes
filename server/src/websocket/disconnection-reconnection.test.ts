@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-import WebSocket from "ws";
-
 import { buildApp } from "../app.js";
 import { ConnectionLifecycleService } from "../game/connection-lifecycle.js";
 import { GameManagementService } from "../game/game-management.js";
@@ -21,8 +19,8 @@ class Peer {
 
   constructor(url: string) {
     this.socket = new WebSocket(url);
-    this.socket.on("message", (data) => {
-      const message = JSON.parse(String(data)) as Message;
+    this.socket.addEventListener("message", (event) => {
+      const message = JSON.parse(String(event.data)) as Message;
       const waiter = this.waiters.shift();
       if (waiter) waiter(message);
       else this.queue.push(message);
@@ -32,8 +30,8 @@ class Peer {
   async open(): Promise<void> {
     if (this.socket.readyState === WebSocket.OPEN) return;
     await new Promise<void>((resolve, reject) => {
-      this.socket.once("open", resolve);
-      this.socket.once("error", reject);
+      this.socket.addEventListener("open", () => resolve(), { once: true });
+      this.socket.addEventListener("error", () => reject(new Error("WebSocket connection failed.")), { once: true });
     });
   }
 
@@ -54,7 +52,7 @@ class Peer {
   async closeAndWait(): Promise<void> {
     if (this.socket.readyState === WebSocket.CLOSED) return;
     await new Promise<void>((resolve) => {
-      this.socket.once("close", resolve);
+      this.socket.addEventListener("close", () => resolve(), { once: true });
       this.socket.close();
       if (this.socket.readyState === WebSocket.CLOSED) resolve();
     });
