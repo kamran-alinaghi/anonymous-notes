@@ -1,5 +1,6 @@
 import type { Room } from "../domain/types.js";
 import type { GameManagementService } from "../game/game-management.js";
+import type { RoundLifecycleService } from "../game/round-lifecycle.js";
 import type { LobbyManagementService } from "../lobby/lobby-management.js";
 import type { NoteSubmissionService, NoteSubmissionProgress } from "../notes/note-submission.js";
 import type { RevealSessionService, RevealViewer } from "../reveal/reveal-session.js";
@@ -388,6 +389,41 @@ export class WebSocketTransport {
       total: result.value.total,
     });
     this.broadcastRevealState(session.roomCode);
+  }
+
+  private handleRoundLifecycle(
+    socket: SessionConnection,
+    session: ConnectionSession,
+    requestId: string,
+    action: "COMPLETE_ROUND" | "FINISH_GAME" | "START_NEXT_ROUND",
+  ): void {
+    if (session.role !== "HOST" || !session.hostId || !session.roomCode) {
+      this.trySend(socket, safeError("UNAUTHORIZED", "Only the authenticated room host may change the game lifecycle.", requestId));
+      return;
+    }
+    if (!this.roundLifecycle) {
+      this.trySend(socket, safeError("ROUND_LIFECYCLE_UNAVAILABLE", "Round lifecycle management is unavailable.", requestId));
+      return;
+    }
+
+    const result = action === "COMPLETE_ROUND"
+      ? this.roundLifecycle.completeRound(session.roomCode, session.hostId)
+      : action === "FINISH_GAME"
+        ? this.roundLifecycle.finishGame(session.roomCode, session.hostId)
+        : this.roundLifecycle.startNextRound(session.roomCode, session.hostId);
+    if (!result.ok) {
+      this.trySend(socket, safeError(result.error.code, result.error.message, requestId));
+      return;
+    }
+
+    const room = gameRoomView(result.value);
+    const response = action === "COMPLETE_ROUND"
+      ? { type: "ROUND_COMPLETED" as const, requestId, room }
+      : action === "FINISH_GAME"
+        ? { type: "GAME_FINISHED" as const, requestId, room }
+        : { type: "NEXT_ROUND_STARTED" as const, requestId, room };
+    this.trySend(socket, response);
+    this.broadcastGameState(result.value);
   }
 
   /** Every connection gets a viewer-specific projection; private contents are never room-broadcast. */
