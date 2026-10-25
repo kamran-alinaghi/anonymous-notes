@@ -362,7 +362,8 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
       await clients.get(finalDisconnect.nickname)!.closeAndWait();
       await host.nextMatching((item) =>
         item.type === "WAITING_FOR_PLAYERS" &&
-        Array.isArray(item.disconnectedPlayers) && item.disconnectedPlayers.length === 1);
+        Array.isArray(item.disconnectedPlayers) &&
+        item.disconnectedPlayers.some((player: { nickname: string }) => player.nickname === finalDisconnect.nickname));
       host.send({ type: "TERMINATE_GAME", requestId: "terminate" });
       await message(host, "GAME_TERMINATED", "terminate");
       expect(store.getByCode("EAEAAA")?.phase).toBe("FINISHED");
