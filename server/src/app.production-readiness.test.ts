@@ -114,22 +114,18 @@ describe("production-readiness controls", () => {
     const second = new WebSocket(url);
     const secondMessages: string[] = [];
     second.addEventListener("message", (event) => secondMessages.push(String(event.data)));
-    const outcome = await new Promise<"opened" | "closed">((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Second WebSocket connection was not rejected.")), 2_000);
-      second.addEventListener("open", () => {
+    const closeEvent = await new Promise<CloseEvent>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Second WebSocket connection was not closed.")), 2_000);
+      second.addEventListener("close", (event) => {
         clearTimeout(timeout);
-        resolve("opened");
-      }, { once: true });
-      second.addEventListener("close", () => {
-        clearTimeout(timeout);
-        resolve("closed");
+        resolve(event);
       }, { once: true });
       second.addEventListener("error", () => {
-        // A rejected upgrade reports an error in browser-compatible WebSocket clients.
+        // Some clients also report a transport error before the close event.
       }, { once: true });
     });
 
-    expect(outcome).toBe("closed");
+    expect(closeEvent.code).toBe(1013);
     expect(secondMessages.some((message) => message.includes('"type":"CONNECTED"'))).toBe(false);
     first.close();
     await app.close();
