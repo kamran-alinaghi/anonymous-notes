@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { GameRoomView, SubmissionProgressView } from "../connection/protocol";
+import type { GameRoomView, RevealStateView, SubmissionProgressView } from "../connection/protocol";
 import { GamePhaseScreen } from "./GamePhaseScreen";
 
 afterEach(() => cleanup());
@@ -49,9 +49,11 @@ describe("GamePhaseScreen", () => {
         nickname="Player 1"
         viewerRole="PLAYER"
         progress={null}
+        revealState={null}
         busy={false}
         onSetSubject={onSetSubject}
         onSubmitBatch={vi.fn().mockResolvedValue(undefined)}
+        onNavigateReveal={vi.fn().mockResolvedValue(undefined)}
       />,
     );
 
@@ -68,9 +70,11 @@ describe("GamePhaseScreen", () => {
         nickname="Player 2"
         viewerRole="PLAYER"
         progress={null}
+        revealState={null}
         busy={false}
         onSetSubject={vi.fn()}
         onSubmitBatch={vi.fn()}
+        onNavigateReveal={vi.fn().mockResolvedValue(undefined)}
       />,
     );
 
@@ -92,9 +96,11 @@ describe("GamePhaseScreen", () => {
         nickname="Player 1"
         viewerRole="PLAYER"
         progress={progress}
+        revealState={null}
         busy={false}
         onSetSubject={vi.fn()}
         onSubmitBatch={onSubmitBatch}
+        onNavigateReveal={vi.fn().mockResolvedValue(undefined)}
       />,
     );
 
@@ -118,12 +124,115 @@ describe("GamePhaseScreen", () => {
         nickname="Player 1"
         viewerRole="PLAYER"
         progress={null}
+        revealState={null}
         busy={false}
         onSetSubject={vi.fn()}
         onSubmitBatch={vi.fn()}
+        onNavigateReveal={vi.fn().mockResolvedValue(undefined)}
       />,
     );
 
     expect(screen.getByRole("button", { name: /submit all notes/i })).toBeDisabled();
+  });
+
+  it("shows the note and recipient on the SINGLE_DEVICE host display", () => {
+    const revealState: RevealStateView = {
+      roomCode: "ABCDEF",
+      revealMode: "SINGLE_DEVICE",
+      phase: "REVEALING",
+      position: 0,
+      total: 3,
+      displayNote: { content: "A secret compliment", targetNickname: "Player 2" },
+    };
+    render(
+      <GamePhaseScreen
+        room={{ ...room, revealMode: "SINGLE_DEVICE", phase: "REVEALING" }}
+        nickname="Host"
+        viewerRole="HOST"
+        progress={null}
+        revealState={revealState}
+        busy={false}
+        onSetSubject={vi.fn()}
+        onSubmitBatch={vi.fn()}
+        onNavigateReveal={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.getByText("A secret compliment")).toBeInTheDocument();
+    expect(screen.getByText("FOR Player 2")).toBeInTheDocument();
+    expect(screen.getByText("1", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText("3", { selector: "strong" })).toBeInTheDocument();
+  });
+
+  it("shows note content only when the individual-device server projection includes it", () => {
+    const revealState: RevealStateView = {
+      roomCode: "ABCDEF",
+      revealMode: "INDIVIDUAL_DEVICES",
+      phase: "REVEALING",
+      position: 1,
+      total: 3,
+      displayNote: { content: "Only the assigned reader sees this" },
+    };
+    const { rerender } = render(
+      <GamePhaseScreen
+        room={{ ...room, phase: "REVEALING" }}
+        nickname="Player 2"
+        viewerRole="PLAYER"
+        progress={null}
+        revealState={revealState}
+        busy={false}
+        onSetSubject={vi.fn()}
+        onSubmitBatch={vi.fn()}
+        onNavigateReveal={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    expect(screen.getByText("Only the assigned reader sees this")).toBeInTheDocument();
+
+    rerender(
+      <GamePhaseScreen
+        room={{ ...room, phase: "REVEALING" }}
+        nickname="Player 3"
+        viewerRole="PLAYER"
+        progress={null}
+        revealState={{ ...revealState, displayNote: undefined }}
+        busy={false}
+        onSetSubject={vi.fn()}
+        onSubmitBatch={vi.fn()}
+        onNavigateReveal={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    expect(screen.queryByText("Only the assigned reader sees this")).not.toBeInTheDocument();
+    expect(screen.getByText("This note is for another reader.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /next note/i })).not.toBeInTheDocument();
+  });
+
+  it("lets the host navigate the reveal using server-authoritative actions", async () => {
+    const user = userEvent.setup();
+    const onNavigateReveal = vi.fn().mockResolvedValue(undefined);
+    const revealState: RevealStateView = {
+      roomCode: "ABCDEF",
+      revealMode: "INDIVIDUAL_DEVICES",
+      phase: "REVEALING",
+      position: 0,
+      total: 2,
+      displayNote: { content: "Host is the assigned reader too" },
+    };
+    render(
+      <GamePhaseScreen
+        room={{ ...room, phase: "REVEALING" }}
+        nickname="Player 1"
+        viewerRole="HOST"
+        progress={null}
+        revealState={revealState}
+        busy={false}
+        onSetSubject={vi.fn()}
+        onSubmitBatch={vi.fn()}
+        onNavigateReveal={onNavigateReveal}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /previous note/i })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /next note/i }));
+    expect(onNavigateReveal).toHaveBeenCalledWith("NEXT");
   });
 });
