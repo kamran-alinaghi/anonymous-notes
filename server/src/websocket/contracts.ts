@@ -51,6 +51,10 @@ export interface NavigateRevealRequest {
   action: "NEXT" | "PREVIOUS";
 }
 
+export interface CompleteRoundRequest { type: "COMPLETE_ROUND"; requestId: string; }
+export interface FinishGameRequest { type: "FINISH_GAME"; requestId: string; }
+export interface StartNextRoundRequest { type: "START_NEXT_ROUND"; requestId: string; }
+
 export type IncomingMessage =
   | CreateRoomRequest
   | JoinRoomRequest
@@ -59,7 +63,10 @@ export type IncomingMessage =
   | SetSubjectRequest
   | SubmitNoteBatchRequest
   | GetRevealStateRequest
-  | NavigateRevealRequest\n  | CompleteRoundRequest\n  | FinishGameRequest\n  | StartNextRoundRequest;
+  | NavigateRevealRequest
+  | CompleteRoundRequest
+  | FinishGameRequest
+  | StartNextRoundRequest;
 
 export interface HostLobbyRoomView {
   roomCode: string;
@@ -137,6 +144,9 @@ export type OutgoingMessage =
   | { type: "REVEAL_STATE"; requestId: string; state: RevealStateView }
   | { type: "REVEAL_NAVIGATED"; requestId: string; position: number; total: number }
   | { type: "REVEAL_STATE_UPDATED"; state: RevealStateView }
+  | { type: "ROUND_COMPLETED"; requestId: string; room: GameRoomView }
+  | { type: "GAME_FINISHED"; requestId: string; room: GameRoomView }
+  | { type: "NEXT_ROUND_STARTED"; requestId: string; room: GameRoomView }
   | { type: "ERROR"; requestId?: string; error: { code: string; message: string } };
 
 export type MessageParseResult =
@@ -234,6 +244,10 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
       return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "NAVIGATE_REVEAL requires action NEXT or PREVIOUS." };
     }
     return { ok: true, message: { type: "NAVIGATE_REVEAL", requestId, action: value.action } };
+  }
+
+  if (value.type === "COMPLETE_ROUND" || value.type === "FINISH_GAME" || value.type === "START_NEXT_ROUND") {
+    return { ok: true, message: { type: value.type, requestId } };
   }
 
   if (!Array.isArray(value.notes) || value.notes.length > 100 ||
