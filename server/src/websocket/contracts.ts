@@ -1,6 +1,6 @@
 import type { RevealMode } from "../domain/types.js";
 
-export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM"] as const;
+export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS"] as const;
 export type IncomingMessageType = (typeof INCOMING_MESSAGE_TYPES)[number];
 
 export interface CreateRoomRequest {
@@ -17,20 +17,41 @@ export interface JoinRoomRequest {
   nickname: string;
 }
 
-export type IncomingMessage = CreateRoomRequest | JoinRoomRequest;
+export interface ReorderPlayersRequest {
+  type: "REORDER_PLAYERS";
+  requestId: string;
+  playerIds: string[];
+}
 
-export interface PublicRoomView {
+export type IncomingMessage = CreateRoomRequest | JoinRoomRequest | ReorderPlayersRequest;
+
+export interface HostLobbyRoomView {
   roomCode: string;
   revealMode: RevealMode;
   phase: string;
   hostNickname: string;
-  players: Array<{ nickname: string }>;
+  playerCount: number;
+  players: Array<{ id: string; nickname: string }>;
+  viewerRole: "HOST";
 }
+
+export interface PlayerLobbyRoomView {
+  roomCode: string;
+  revealMode: RevealMode;
+  phase: string;
+  hostNickname: string;
+  playerCount: number;
+  viewerRole: "PLAYER";
+}
+
+export type PublicRoomView = HostLobbyRoomView | PlayerLobbyRoomView;
 
 export type OutgoingMessage =
   | { type: "CONNECTED"; connectionId: string }
   | { type: "ROOM_CREATED"; requestId: string; room: PublicRoomView; sessionRole: "HOST" | "PLAYER"; nickname: string }
   | { type: "ROOM_JOINED"; requestId: string; room: PublicRoomView; sessionRole: "PLAYER"; nickname: string }
+  | { type: "LOBBY_UPDATED"; room: PublicRoomView }
+  | { type: "PLAYER_ORDER_UPDATED"; requestId: string; room: HostLobbyRoomView }
   | { type: "ERROR"; requestId?: string; error: { code: string; message: string } };
 
 export type MessageParseResult =
@@ -84,13 +105,25 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
     } };
   }
 
-  if (!isString(value.roomCode, 64) || !isString(value.nickname, 256)) {
-    return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "JOIN_ROOM requires roomCode and nickname." };
+  if (value.type === "JOIN_ROOM") {
+    if (!isString(value.roomCode, 64) || !isString(value.nickname, 256)) {
+      return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "JOIN_ROOM requires roomCode and nickname." };
+    }
+    return { ok: true, message: {
+      type: "JOIN_ROOM",
+      requestId,
+      roomCode: value.roomCode,
+      nickname: value.nickname,
+    } };
+  }
+
+  if (!Array.isArray(value.playerIds) || value.playerIds.length > 100 ||
+      value.playerIds.some((id) => !isString(id, 128))) {
+    return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "REORDER_PLAYERS requires a playerIds array." };
   }
   return { ok: true, message: {
-    type: "JOIN_ROOM",
+    type: "REORDER_PLAYERS",
     requestId,
-    roomCode: value.roomCode,
-    nickname: value.nickname,
+    playerIds: value.playerIds as string[],
   } };
 }
