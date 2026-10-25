@@ -2,6 +2,40 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 
+function waitForMessage(
+  socket: WebSocket,
+  messages: string[],
+  predicate: (message: string) => boolean,
+): Promise<string> {
+  const existing = messages.find(predicate);
+  if (existing !== undefined) return Promise.resolve(existing);
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.removeEventListener("message", onMessage);
+      reject(new Error("Timed out waiting for WebSocket message."));
+    }, 2_000);
+    const onMessage = (event: MessageEvent) => {
+      const message = String(event.data);
+      messages.push(message);
+      if (!predicate(message)) return;
+      clearTimeout(timeout);
+      socket.removeEventListener("message", onMessage);
+      resolve(message);
+    };
+    socket.addEventListener("message", onMessage);
+  });
+}
+
+async function openSocket(url: string): Promise<WebSocket> {
+  const socket = new WebSocket(url);
+  await new Promise<void>((resolve, reject) => {
+    socket.addEventListener("open", () => resolve(), { once: true });
+    socket.addEventListener("error", () => reject(new Error("WebSocket failed to open.")), { once: true });
+  });
+  return socket;
+}
+
 describe("production-readiness controls", () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
@@ -39,14 +73,44 @@ describe("production-readiness controls", () => {
     expect(response.json()).toEqual({ error: "ORIGIN_NOT_ALLOWED" });
   });
 
+  it("rejects connections above the configured concurrent connection limit", async () => {
+    app = await buildApp({
+      config: loadEnv({ NODE_ENV: "test", LOG_LEVEL: "silent", MAX_WS_CONNECTIONS: "1" }),
+    });
+    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+    const url = address.replace("http", "ws") + "/ws";
+    const first = new WebSocket(url);
+    const firstMessages: string[] = [];
+    first.addEventListener("message", (event) => firstMessages.push(String(event.data)));
+    await new Promise<void>((resolve, reject) => {
+      first.addEventListener("open", () => resolve(), { once: true });
+      first.addEventListener("error", () => reject(new Error("First WebSocket failed to open.")), { once: true });
+    });
+    await waitForMessage(first, firstMessages, (message) => message.includes('"type":"CONNECTED"'));
+
+    const second = new WebSocket(url);
+    const secondMessages: string[] = [];
+    second.addEventListener("message", (event) => secondMessages.push(String(event.data)));
+    const outcome = await new Promise<"opened" | "closed">((resolve, reject) => {
+      second.addEventListener("open", () => resolve("opened"), { once: true });
+      second.addEventListener("close", () => resolve("closed"), { once: true });
+      second.addEventListener("error", () => {
+        // A rejected upgrade reports an error in browser-compatible WebSocket clients.
+      }, { once: true });
+      setTimeout(() => reject(new Error("Second WebSocket connection was not rejected.")), 2_000);
+    });
+
+    expect(outcome).toBe("closed");
+    expect(secondMessages.some((message) => message.includes('"type":"CONNECTED"'))).toBe(false);
+    first.close();
+    await app.close();
+    app = undefined;
+  });
+
   it("closes active WebSocket connections during application shutdown", async () => {
     app = await buildApp({ config: loadEnv({ NODE_ENV: "test", LOG_LEVEL: "silent" }) });
     const address = await app.listen({ host: "127.0.0.1", port: 0 });
-    const socket = new WebSocket(address.replace("http", "ws") + "/ws");
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener("open", () => resolve(), { once: true });
-      socket.addEventListener("error", () => reject(new Error("WebSocket failed to open.")), { once: true });
-    });
+    const socket = await openSocket(address.replace("http", "ws") + "/ws");
     const closed = new Promise<CloseEvent>((resolve) => {
       socket.addEventListener("close", resolve, { once: true });
     });
@@ -66,11 +130,7 @@ describe("production-readiness controls", () => {
       }),
     });
     const address = await app.listen({ host: "127.0.0.1", port: 0 });
-    const socket = new WebSocket(address.replace("http", "ws") + "/ws");
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener("open", () => resolve(), { once: true });
-      socket.addEventListener("error", () => reject(new Error("WebSocket failed to open.")), { once: true });
-    });
+    const socket = await openSocket(address.replace("http", "ws") + "/ws");
     const closed = new Promise<CloseEvent>((resolve) => {
       socket.addEventListener("close", resolve, { once: true });
     });
@@ -91,30 +151,14 @@ describe("production-readiness controls", () => {
       }),
     });
     const address = await app.listen({ host: "127.0.0.1", port: 0 });
-    const socket = new WebSocket(address.replace("http", "ws") + "/ws");
-    const received: string[] = [];
-    socket.addEventListener("message", (event) => received.push(String(event.data)));
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener("open", () => resolve(), { once: true });
-      socket.addEventListener("error", () => reject(new Error("WebSocket failed to open.")), { once: true });
-    });
-    await new Promise<void>((resolve) => {
-      const check = () => {
-        if (received.some((message) => message.includes('"type":"CONNECTED"'))) resolve();
-        else setTimeout(check, 5);
-      };
-      check();
-    });
+    const socket = await openSocket(address.replace("http", "ws") + "/ws");
+    const messages: string[] = [];
+    const connected = waitForMessage(socket, messages, (message) => message.includes('"type":"CONNECTED"'));
+    await connected;
 
-    const firstResponse = new Promise<void>((resolve) => {
-      const check = () => {
-        if (received.some((message) => message.includes('"code":"MALFORMED_MESSAGE"'))) resolve();
-        else setTimeout(check, 5);
-      };
-      check();
-    });
+    const malformedResponse = waitForMessage(socket, messages, (message) => message.includes('"code":"MALFORMED_MESSAGE"'));
     socket.send("{invalid");
-    await firstResponse;
+    await malformedResponse;
 
     const closed = new Promise<CloseEvent>((resolve) => {
       socket.addEventListener("close", resolve, { once: true });
