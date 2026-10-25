@@ -505,6 +505,80 @@ describe("WebSocket transport integration", () => {
     }
   });
 
+  it("includes the safe player list in game views for both reveal modes and all room members", async () => {
+    const { peer } = await setup();
+    const singleHost = peer();
+    const singlePlayer = peer();
+    const individualHost = peer();
+    const individualPlayer = peer();
+    await Promise.all([singleHost, singlePlayer, individualHost, individualPlayer].map(connected));
+
+    singleHost.send({
+      type: "CREATE_ROOM",
+      requestId: "single-create",
+      revealMode: "SINGLE_DEVICE",
+      hostNickname: "Moderator",
+    });
+    expect((await singleHost.nextMessage()).type).toBe("ROOM_CREATED");
+
+    singlePlayer.send({ type: "JOIN_ROOM", requestId: "single-join", roomCode: "AAAAAA", nickname: "Alpha" });
+    expect((await singlePlayer.nextMessage()).type).toBe("ROOM_JOINED");
+    expect((await singlePlayer.nextMessage()).type).toBe("LOBBY_UPDATED");
+    expect((await singleHost.nextMessage()).type).toBe("LOBBY_UPDATED");
+
+    individualHost.send({
+      type: "CREATE_ROOM",
+      requestId: "individual-create",
+      revealMode: "INDIVIDUAL_DEVICES",
+      hostNickname: "HostPlayer",
+    });
+    expect((await individualHost.nextMessage()).type).toBe("ROOM_CREATED");
+
+    individualPlayer.send({ type: "JOIN_ROOM", requestId: "individual-join", roomCode: "BBBBBB", nickname: "Beta" });
+    expect((await individualPlayer.nextMessage()).type).toBe("ROOM_JOINED");
+    expect((await individualPlayer.nextMessage()).type).toBe("LOBBY_UPDATED");
+    expect((await individualHost.nextMessage()).type).toBe("LOBBY_UPDATED");
+
+    singleHost.send({ type: "START_GAME", requestId: "single-start" });
+    const singleStarted = await singleHost.nextMessage();
+    expect(singleStarted).toMatchObject({
+      type: "GAME_STARTED",
+      requestId: "single-start",
+      room: { revealMode: "SINGLE_DEVICE", players: [{ nickname: "Alpha" }] },
+    });
+    expect((singleStarted.room as { players: Array<Record<string, unknown>> }).players[0]).toEqual({
+      id: expect.any(String),
+      nickname: "Alpha",
+    });
+    expect((await singleHost.nextMessage()).type).toBe("GAME_STATE_UPDATED");
+    expect(await singlePlayer.nextMessage()).toMatchObject({
+      type: "GAME_STATE_UPDATED",
+      room: { revealMode: "SINGLE_DEVICE", players: [{ nickname: "Alpha" }] },
+    });
+
+    individualHost.send({ type: "START_GAME", requestId: "individual-start" });
+    const individualStarted = await individualHost.nextMessage();
+    expect(individualStarted).toMatchObject({
+      type: "GAME_STARTED",
+      requestId: "individual-start",
+      room: {
+        revealMode: "INDIVIDUAL_DEVICES",
+        players: [{ nickname: "HostPlayer" }, { nickname: "Beta" }],
+      },
+    });
+    expect((individualStarted.room as { players: Array<Record<string, unknown>> }).players.every(
+      (player) => Object.keys(player).sort().join(",") === "id,nickname",
+    )).toBe(true);
+    expect((await individualHost.nextMessage()).type).toBe("GAME_STATE_UPDATED");
+    expect(await individualPlayer.nextMessage()).toMatchObject({
+      type: "GAME_STATE_UPDATED",
+      room: {
+        revealMode: "INDIVIDUAL_DEVICES",
+        players: [{ nickname: "HostPlayer" }, { nickname: "Beta" }],
+      },
+    });
+  });
+
   it("unregisters a disconnected connection without removing room membership", async () => {
     const { peer } = await setup();
     const client = peer();
