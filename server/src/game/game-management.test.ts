@@ -107,11 +107,12 @@ describe("GameManagementService", () => {
     });
     expect(store.getByCode(room.code)).toEqual(started.value);
 
-    const submitted = game.submitSubject(room.code, setterId, "A good subject");
+    const validMaxLengthSubject = "x".repeat(300);
+    const submitted = game.submitSubject(room.code, setterId, validMaxLengthSubject);
     expect(submitted.ok).toBe(true);
     if (!submitted.ok) return;
     expect(submitted.value.phase).toBe("WRITING");
-    expect(submitted.value.rounds[0]?.subject).toBe("A good subject");
+    expect(submitted.value.rounds[0]?.subject).toBe(validMaxLengthSubject);
     expect(game.submitSubject(room.code, setterId, "Second subject")).toMatchObject({
       ok: false,
       error: { code: "ROOM_UNAVAILABLE" },
