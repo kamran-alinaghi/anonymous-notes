@@ -147,15 +147,17 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
     } };
   }
 
-  if (!Array.isArray(value.playerIds) || value.playerIds.length > 100 ||
-      value.playerIds.some((id) => !isString(id, 128))) {
-    return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "REORDER_PLAYERS requires a playerIds array." };
+  if (value.type === "REORDER_PLAYERS") {
+    if (!Array.isArray(value.playerIds) || value.playerIds.length > 100 ||
+        value.playerIds.some((id) => !isString(id, 128))) {
+      return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "REORDER_PLAYERS requires a playerIds array." };
+    }
+    return { ok: true, message: {
+      type: "REORDER_PLAYERS",
+      requestId,
+      playerIds: value.playerIds as string[],
+    } };
   }
-  return { ok: true, message: {
-    type: "REORDER_PLAYERS",
-    requestId,
-    playerIds: value.playerIds as string[],
-  } };
 
   if (value.type === "START_GAME") {
     return { ok: true, message: { type: "START_GAME", requestId } };
