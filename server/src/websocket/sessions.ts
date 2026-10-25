@@ -8,6 +8,7 @@ export interface ConnectionSession {
   roomCode: string | null;
   roomId: RoomId | null;
   playerId: PlayerId | null;
+  hostId: string | null;
   nickname: string | null;
 }
 
@@ -31,6 +32,7 @@ export class ConnectionSessions {
       roomCode: null,
       roomId: null,
       playerId: null,
+      hostId: null,
       nickname: null,
     };
     this.bySocket.set(socket, session);
