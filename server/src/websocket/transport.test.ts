@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../app.js";
 import { InMemoryRoomStore } from "../rooms/room-store.js";
 import { RoomManagementService } from "../rooms/room-management.js";
+import { LobbyManagementService } from "../lobby/lobby-management.js";
 
 type WireMessage = Record<string, unknown>;
 
@@ -65,13 +66,16 @@ describe("WebSocket transport integration", () => {
     let id = 0;
     let code = 0;
     const codes = ["AAAAAA", "BBBBBB", "CCCCCC"];
-    const roomManagement = new RoomManagementService(new InMemoryRoomStore(), {
+    const store = new InMemoryRoomStore();
+    const roomManagement = new RoomManagementService(store, {
       generateRoomCode: () => codes[code++] ?? "DDDDDD",
       generateId: () => `server-id-${++id}`,
     });
+    const lobbyManagement = new LobbyManagementService(store);
     let connectionId = 0;
     const serverApp = await buildApp({
       roomManagement,
+      lobbyManagement,
       generateConnectionId: () => `connection-${++connectionId}`,
     });
     app = serverApp;
