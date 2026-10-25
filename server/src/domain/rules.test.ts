@@ -33,7 +33,12 @@ const round: Round = {
   readerAssignments: [],
 };
 
-type RoomOverrides = Partial<Omit<SingleDeviceRoom, "revealMode" | "host">> & {\n  revealMode?: Room["revealMode"];\n  host?: Room["host"];\n};\n\nfunction makeRoom(overrides: RoomOverrides = {}): Room {
+type RoomOverrides = Partial<Omit<SingleDeviceRoom, "revealMode" | "host">> & {
+  revealMode?: Room["revealMode"];
+  host?: Room["host"];
+};
+
+function makeRoom(overrides: RoomOverrides = {}): Room {
   const base: Room = {
     id: "room-1",
     code: "ABCDEF",
