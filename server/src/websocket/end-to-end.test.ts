@@ -81,10 +81,10 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
     let roundId = 0;
     let noteId = 0;
     let connectionId = 0;
-    const roomCodes = ["E2EAAA", "E2EBBB"];
+    const roomCodes = ["EAEAAA", "EAEBBB"];
     const store = new InMemoryRoomStore();
     const roomManagement = new RoomManagementService(store, {
-      generateRoomCode: () => roomCodes[roomCodeIndex++] ?? "E2ECCC",
+      generateRoomCode: () => roomCodes[roomCodeIndex++] ?? "EAECCC",
       generateId: () => `e2e-player-${++id}`,
     });
     const lobbyManagement = new LobbyManagementService(store);
@@ -173,7 +173,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
       const created = await expectMessage(host, {
         type: "ROOM_CREATED",
         requestId: "create-room",
-        room: { roomCode: "E2EAAA", revealMode: mode, phase: "LOBBY" },
+        room: { roomCode: "EAEAAA", revealMode: mode, phase: "LOBBY" },
       });
 
       const playerClientsByNickname = new Map<string, WebSocketPeer>();
@@ -186,14 +186,14 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         joiningPeer.send({
           type: "JOIN_ROOM",
           requestId: `join-${index + 1}`,
-          roomCode: "E2EAAA",
+          roomCode: "EAEAAA",
           nickname,
         });
         await expectMessage(joiningPeer, {
           type: "ROOM_JOINED",
           requestId: `join-${index + 1}`,
           sessionRole: "PLAYER",
-          room: { roomCode: "E2EAAA", viewerRole: "PLAYER" },
+          room: { roomCode: "EAEAAA", viewerRole: "PLAYER" },
         });
         playerClientsByNickname.set(nickname, joiningPeer);
         members = [...members, joiningPeer];
@@ -211,7 +211,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         )).toBe(true);
       }
 
-      const lobby = store.getByCode("E2EAAA")!;
+      const lobby = store.getByCode("EAEAAA")!;
       const initialPlayers = lobby.players;
       expect(initialPlayers).toHaveLength(4);
       expect(initialPlayers.some((player) => player.id === lobby.host.id))
@@ -229,7 +229,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         requestId: "invalid-reorder",
         error: { code: "INVALID_PLAYER_ORDER" },
       });
-      expect(store.getByCode("E2EAAA")?.players.map((player) => player.id)).toEqual(initialPlayerIds);
+      expect(store.getByCode("EAEAAA")?.players.map((player) => player.id)).toEqual(initialPlayerIds);
       expect(host.messages).toHaveLength(0);
 
       const reorderedIds = [...initialPlayerIds].reverse();
@@ -242,9 +242,9 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
       expect((orderResponse.room as { players: Array<{ id: string }> }).players.map((player) => player.id))
         .toEqual(reorderedIds);
       await expectRoomBroadcast(members, "LOBBY_UPDATED");
-      expect(store.getByCode("E2EAAA")?.players.map((player) => player.id)).toEqual(reorderedIds);
+      expect(store.getByCode("EAEAAA")?.players.map((player) => player.id)).toEqual(reorderedIds);
 
-      const orderedPlayers = store.getByCode("E2EAAA")!.players;
+      const orderedPlayers = store.getByCode("EAEAAA")!.players;
       const playerIdByClient = new Map<WebSocketPeer, string>();
       for (const player of orderedPlayers) {
         const playerClient = playerClientsByNickname.get(player.nickname);
@@ -262,7 +262,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         requestId: "unauthorized-start",
         error: { code: "UNAUTHORIZED" },
       });
-      expect(store.getByCode("E2EAAA")?.phase).toBe("LOBBY");
+      expect(store.getByCode("EAEAAA")?.phase).toBe("LOBBY");
 
       host.send({ type: "START_GAME", requestId: "start-game" });
       await expectMessage(host, {
@@ -288,7 +288,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         requestId: "wrong-subject-setter",
         error: { code: "NOT_SUBJECT_SETTER" },
       });
-      expect(store.getByCode("E2EAAA")?.phase).toBe("CHOOSING_SUBJECT");
+      expect(store.getByCode("EAEAAA")?.phase).toBe("CHOOSING_SUBJECT");
 
       setterClient.send({ type: "SET_SUBJECT", requestId: "set-subject", subject: "A mystery" });
       await expectMessage(setterClient, {
@@ -300,7 +300,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         expect(message.room).toMatchObject({ phase: "WRITING", subject: "A mystery" });
       });
 
-      const currentRoom = store.getByCode("E2EAAA")!;
+      const currentRoom = store.getByCode("EAEAAA")!;
       const actualPlayers = currentRoom.players;
       let contentIndex = 0;
       const batchFor = (authorId: string) => actualPlayers
@@ -318,8 +318,8 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         requestId: "invalid-batch",
         error: { code: "INVALID_NOTE_BATCH" },
       });
-      expect(store.getByCode("E2EAAA")?.phase).toBe("WRITING");
-      expect(store.getByCode("E2EAAA")?.rounds[0]?.notes).toHaveLength(0);
+      expect(store.getByCode("EAEAAA")?.phase).toBe("WRITING");
+      expect(store.getByCode("EAEAAA")?.rounds[0]?.notes).toHaveLength(0);
 
       for (let index = 0; index < actualPlayers.length; index += 1) {
         const author = actualPlayers[index]!;
@@ -367,7 +367,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
             requestId: "duplicate-batch",
             error: { code: "ALREADY_SUBMITTED" },
           });
-          expect(store.getByCode("E2EAAA")?.rounds[0]?.notes).toHaveLength(actualPlayers.length - 1);
+          expect(store.getByCode("EAEAAA")?.rounds[0]?.notes).toHaveLength(actualPlayers.length - 1);
         }
 
         if (index === actualPlayers.length - 1) {
@@ -400,7 +400,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         requestId: "premature-finish",
         error: { code: "ROOM_UNAVAILABLE" },
       });
-      expect(store.getByCode("E2EAAA")?.phase).toBe("REVEALING");
+      expect(store.getByCode("EAEAAA")?.phase).toBe("REVEALING");
 
       const totalNotes = actualPlayers.length * (actualPlayers.length - 1);
       host.send({ type: "NAVIGATE_REVEAL", requestId: "at-start-boundary", action: "PREVIOUS" });
@@ -409,7 +409,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         requestId: "at-start-boundary",
         error: { code: "REVEAL_BOUNDARY" },
       });
-      expect(store.getByCode("E2EAAA")?.rounds[0]?.revealIndex).toBe(0);
+      expect(store.getByCode("EAEAAA")?.rounds[0]?.revealIndex).toBe(0);
 
       for (let position = 1; position < totalNotes; position += 1) {
         host.send({ type: "NAVIGATE_REVEAL", requestId: `next-${position}`, action: "NEXT" });
@@ -457,7 +457,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         requestId: "at-end-boundary",
         error: { code: "REVEAL_BOUNDARY" },
       });
-      expect(store.getByCode("E2EAAA")?.rounds[0]?.revealIndex).toBe(totalNotes - 1);
+      expect(store.getByCode("EAEAAA")?.rounds[0]?.revealIndex).toBe(totalNotes - 1);
 
       const unauthorizedLifecyclePeer = joinedPlayers[0]!;
       unauthorizedLifecyclePeer.send({ type: "COMPLETE_ROUND", requestId: "unauthorized-complete" });
@@ -476,7 +476,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
       await expectRoomBroadcast(clients, "GAME_STATE_UPDATED", (message) => {
         expect(message.room).toMatchObject({ phase: "ROUND_COMPLETE", currentRoundNumber: 1 });
       });
-      expect(store.getByCode("E2EAAA")?.phase).toBe("ROUND_COMPLETE");
+      expect(store.getByCode("EAEAAA")?.phase).toBe("ROUND_COMPLETE");
 
       host.send({ type: "COMPLETE_ROUND", requestId: "duplicate-complete" });
       await expectMessage(host, {
@@ -484,7 +484,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         requestId: "duplicate-complete",
         error: { code: "ROOM_UNAVAILABLE" },
       });
-      expect(store.getByCode("E2EAAA")?.phase).toBe("ROUND_COMPLETE");
+      expect(store.getByCode("EAEAAA")?.phase).toBe("ROUND_COMPLETE");
 
       if (hostDecision === "FINISH_GAME") {
         host.send({ type: "FINISH_GAME", requestId: "finish-game" });
@@ -496,7 +496,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
         await expectRoomBroadcast(clients, "GAME_STATE_UPDATED", (message) => {
           expect(message.room).toMatchObject({ phase: "FINISHED", currentRoundNumber: 1 });
         });
-        expect(store.getByCode("E2EAAA")?.phase).toBe("FINISHED");
+        expect(store.getByCode("EAEAAA")?.phase).toBe("FINISHED");
 
         host.send({ type: "FINISH_GAME", requestId: "duplicate-finish" });
         await expectMessage(host, {
@@ -510,7 +510,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
           requestId: "next-after-finish",
           error: { code: "ROOM_UNAVAILABLE" },
         });
-        expect(store.getByCode("E2EAAA")?.rounds).toHaveLength(1);
+        expect(store.getByCode("EAEAAA")?.rounds).toHaveLength(1);
       } else {
         host.send({ type: "START_NEXT_ROUND", requestId: "start-next-round" });
         await expectMessage(host, {
@@ -531,7 +531,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
             subject: null,
           });
         });
-        const nextRoom = store.getByCode("E2EAAA")!;
+        const nextRoom = store.getByCode("EAEAAA")!;
         expect(nextRoom.rounds).toHaveLength(2);
         expect(nextRoom.rounds[1]).toMatchObject({
           number: 2,
@@ -548,7 +548,7 @@ describe("Anonymous Note end-to-end WebSocket flow", () => {
           requestId: "duplicate-next-round",
           error: { code: "ROOM_UNAVAILABLE" },
         });
-        expect(store.getByCode("E2EAAA")?.rounds).toHaveLength(2);
+        expect(store.getByCode("EAEAAA")?.rounds).toHaveLength(2);
       }
 
       // Closing real peers and the Fastify app in afterEach must complete cleanly.
@@ -567,7 +567,7 @@ function verifyRevealStates(
   clients: WebSocketPeer[],
   host: WebSocketPeer,
 ): void {
-  const room = store.getByCode("E2EAAA");
+  const room = store.getByCode("EAEAAA");
   expect(room).toBeDefined();
   const currentRoom = room!;
   const round = currentRoom.rounds.find((item) => item.id === currentRoom.currentRoundId)!;
@@ -584,7 +584,7 @@ function verifyRevealStates(
     expect(message.type).toBe("REVEAL_STATE_UPDATED");
     const state = message.state as Record<string, unknown>;
     expect(state).toMatchObject({
-      roomCode: "E2EAAA",
+      roomCode: "EAEAAA",
       revealMode: mode,
       phase: "REVEALING",
       position,
