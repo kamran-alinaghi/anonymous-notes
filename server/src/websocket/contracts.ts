@@ -1,7 +1,9 @@
 import type { GamePhase, RevealMode } from "../domain/types.js";
 
-export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT", "SUBMIT_NOTE_BATCH", "GET_REVEAL_STATE", "NAVIGATE_REVEAL", "COMPLETE_ROUND", "FINISH_GAME", "START_NEXT_ROUND"] as const;
+export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT", "SUBMIT_NOTE_BATCH", "GET_REVEAL_STATE", "NAVIGATE_REVEAL", "COMPLETE_ROUND", "FINISH_GAME", "START_NEXT_ROUND", "TERMINATE_GAME", "RECONNECT"] as const;
 export type IncomingMessageType = (typeof INCOMING_MESSAGE_TYPES)[number];
+
+export interface ReconnectRequest { type: "RECONNECT"; requestId: string; sessionToken: string; }
 
 export interface CreateRoomRequest {
   type: "CREATE_ROOM";
@@ -54,8 +56,10 @@ export interface NavigateRevealRequest {
 export interface CompleteRoundRequest { type: "COMPLETE_ROUND"; requestId: string; }
 export interface FinishGameRequest { type: "FINISH_GAME"; requestId: string; }
 export interface StartNextRoundRequest { type: "START_NEXT_ROUND"; requestId: string; }
+export interface TerminateGameRequest { type: "TERMINATE_GAME"; requestId: string; }
 
 export type IncomingMessage =
+  | ReconnectRequest
   | CreateRoomRequest
   | JoinRoomRequest
   | ReorderPlayersRequest
@@ -66,7 +70,8 @@ export type IncomingMessage =
   | NavigateRevealRequest
   | CompleteRoundRequest
   | FinishGameRequest
-  | StartNextRoundRequest;
+  | StartNextRoundRequest
+  | TerminateGameRequest;
 
 export interface HostLobbyRoomView {
   roomCode: string;
@@ -132,8 +137,12 @@ export interface RevealStateView {
 
 export type OutgoingMessage =
   | { type: "CONNECTED"; connectionId: string }
-  | { type: "ROOM_CREATED"; requestId: string; room: PublicRoomView; sessionRole: "HOST" | "PLAYER"; nickname: string }
-  | { type: "ROOM_JOINED"; requestId: string; room: PublicRoomView; sessionRole: "PLAYER"; nickname: string }
+  | { type: "SESSION_RESTORED"; requestId: string; sessionRole: "HOST" | "PLAYER"; nickname: string; sessionToken: string; room: GameRoomView }
+  | { type: "PLAYER_CONNECTIONS_UPDATED"; roomCode: string; phase: GamePhase; disconnectedPlayers: Array<{ playerId: string; nickname: string }>; paused: boolean }
+  | { type: "WAITING_FOR_PLAYERS"; roomCode: string; phase: GamePhase; disconnectedPlayers: Array<{ playerId: string; nickname: string }> }
+  | { type: "GAME_RESUMED"; room: GameRoomView }
+  | { type: "ROOM_CREATED"; requestId: string; room: PublicRoomView; sessionRole: "HOST" | "PLAYER"; nickname: string; sessionToken: string }
+  | { type: "ROOM_JOINED"; requestId: string; room: PublicRoomView; sessionRole: "PLAYER"; nickname: string; sessionToken: string }
   | { type: "LOBBY_UPDATED"; room: PublicRoomView }
   | { type: "PLAYER_ORDER_UPDATED"; requestId: string; room: HostLobbyRoomView }
   | { type: "GAME_STARTED"; requestId: string; room: GameRoomView }
@@ -147,6 +156,7 @@ export type OutgoingMessage =
   | { type: "ROUND_COMPLETED"; requestId: string; room: GameRoomView }
   | { type: "GAME_FINISHED"; requestId: string; room: GameRoomView }
   | { type: "NEXT_ROUND_STARTED"; requestId: string; room: GameRoomView }
+  | { type: "GAME_TERMINATED"; requestId: string; room: GameRoomView }
   | { type: "ERROR"; requestId?: string; error: { code: string; message: string } };
 
 export type MessageParseResult =
@@ -185,6 +195,13 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
   }
   if (!requestId) {
     return { ok: false, code: "MALFORMED_MESSAGE", message: "A valid requestId is required." };
+  }
+
+  if (value.type === "RECONNECT") {
+    if (!isString(value.sessionToken, 256)) {
+      return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "RECONNECT requires a valid sessionToken." };
+    }
+    return { ok: true, message: { type: "RECONNECT", requestId, sessionToken: value.sessionToken } };
   }
 
   if (value.type === "CREATE_ROOM") {
@@ -246,7 +263,7 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
     return { ok: true, message: { type: "NAVIGATE_REVEAL", requestId, action: value.action } };
   }
 
-  if (value.type === "COMPLETE_ROUND" || value.type === "FINISH_GAME" || value.type === "START_NEXT_ROUND") {
+  if (value.type === "COMPLETE_ROUND" || value.type === "FINISH_GAME" || value.type === "START_NEXT_ROUND" || value.type === "TERMINATE_GAME") {
     return { ok: true, message: { type: value.type, requestId } };
   }
 
