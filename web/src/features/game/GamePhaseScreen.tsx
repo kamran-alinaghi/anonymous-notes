@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-import type { GameRoomView, SubmissionProgressView } from "../connection/protocol";
+import type { GameRoomView, RevealStateView, SubmissionProgressView, RevealNavigationAction } from "../connection/protocol";
 
 interface GamePhaseScreenProps {
   room: GameRoomView;
   nickname: string;
   viewerRole: "HOST" | "PLAYER";
   progress: SubmissionProgressView | null;
+  revealState: RevealStateView | null;
   busy: boolean;
   onSetSubject: (subject: string) => Promise<void>;
   onSubmitBatch: (notes: Array<{ targetPlayerId: string; content: string }>) => Promise<void>;
+  onNavigateReveal: (action: RevealNavigationAction) => Promise<void>;
 }
 
 export function GamePhaseScreen({
@@ -17,9 +19,11 @@ export function GamePhaseScreen({
   nickname,
   viewerRole,
   progress,
+  revealState,
   busy,
   onSetSubject,
   onSubmitBatch,
+  onNavigateReveal,
 }: GamePhaseScreenProps) {
   const [subject, setSubject] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -89,7 +93,8 @@ export function GamePhaseScreen({
       <h1 id="app-title">
         {room.phase === "CHOOSING_SUBJECT" ? <>Set the <span>subject.</span></> :
           room.phase === "WRITING" ? <>Write your <span>notes.</span></> :
-            <>The game <span>continues.</span></>}
+            room.phase === "REVEALING" ? <>The notes <span>unfold.</span></> :
+              <>The game <span>continues.</span></>}
       </h1>
 
       {room.phase === "CHOOSING_SUBJECT" && (
@@ -165,7 +170,61 @@ export function GamePhaseScreen({
         </>
       )}
 
-      {room.phase !== "CHOOSING_SUBJECT" && room.phase !== "WRITING" && (
+      {room.phase === "REVEALING" && (
+        <>
+          <p className="welcome-copy compact-copy">
+            {room.revealMode === "SINGLE_DEVICE"
+              ? viewerRole === "HOST"
+                ? "Read each anonymous note aloud and move through the sequence together."
+                : "Follow along with the shared screen as the host reveals each note."
+              : "The reveal position is synchronized for everyone. Only the assigned reader can see each note."}
+          </p>
+          <div className="reveal-card" aria-live="polite" aria-atomic="true">
+            <div className="reveal-position">
+              <span>NOTE</span>
+              <strong>{revealState && revealState.total > 0 ? revealState.position + 1 : "—"} <i>/</i> {revealState?.total ?? "—"}</strong>
+            </div>
+            {revealState?.displayNote ? (
+              <div className="revealed-note">
+                {revealState.displayNote.targetNickname && (
+                  <p className="reveal-recipient">FOR {revealState.displayNote.targetNickname}</p>
+                )}
+                <p className="revealed-note-content">{revealState.displayNote.content}</p>
+              </div>
+            ) : (
+              <div className="reveal-waiting">
+                <span className="waiting-pulse" aria-hidden="true" />
+                <strong>{room.revealMode === "SINGLE_DEVICE"
+                  ? "The host is revealing the note on the shared screen."
+                  : "This note is for another reader."}</strong>
+                <span>Keep an eye on the shared reveal sequence.</span>
+              </div>
+            )}
+          </div>
+          {viewerRole === "HOST" && (
+            <div className="reveal-controls">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={busy || !revealState || revealState.position <= 0}
+                onClick={() => void onNavigateReveal("PREVIOUS")}
+              >
+                ← Previous note
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={busy || !revealState || revealState.position >= revealState.total - 1}
+                onClick={() => void onNavigateReveal("NEXT")}
+              >
+                Next note →
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {room.phase !== "CHOOSING_SUBJECT" && room.phase !== "WRITING" && room.phase !== "REVEALING" && (
         <>
           <p className="welcome-copy compact-copy">
             {room.phase === "REVEALING"
