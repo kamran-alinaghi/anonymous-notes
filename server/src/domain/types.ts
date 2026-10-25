@@ -41,6 +41,8 @@ export interface Round {
   notes: Note[];
   /** Frozen order used throughout the active reveal phase. */
   revealSequence: NoteId[] | null;
+  /** Current zero-based reveal position, persisted across reconnects. */
+  revealIndex?: number;
   readerAssignments: ReaderAssignment[];
 }
 
