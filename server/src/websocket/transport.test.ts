@@ -508,7 +508,7 @@ describe("WebSocket transport integration", () => {
     await connected(client);
     client.send({ type: "CREATE_ROOM", requestId: "c", revealMode: "SINGLE_DEVICE", hostNickname: "Host" });
     expect((await client.nextMessage()).type).toBe("ROOM_CREATED");
-    client.close();
+    await client.closeAndWait();
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(app).toBeDefined();
     // Disconnection intentionally does not remove players or rooms.
