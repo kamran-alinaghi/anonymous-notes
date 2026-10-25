@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   assignReaders,
   beginReveal,
+  orderRevealSequence,
   submitNoteBatch,
   transitionRoom,
   validateNoteBatch,
@@ -116,15 +117,29 @@ export class NoteSubmissionService {
     if (!revealStarted.ok) return failure("NOTE_SUBMISSION_FAILED", revealStarted.errors.join(" "));
     const revealRound = currentRound(revealStarted.value);
     if (!revealRound) return failure("NOTE_SUBMISSION_FAILED", "The reveal round could not be initialized.");
-    const assignments = assignReaders(revealRound.notes, revealStarted.value.players);
+    const setterIndex = revealStarted.value.players.findIndex(
+      (player) => player.id === revealStarted.value.currentSubjectSetterPlayerId,
+    );
+    if (setterIndex < 0) {
+      return failure("NOTE_SUBMISSION_FAILED", "The current subject setter is not in the player order.");
+    }
+    const readerOrder = [
+      ...revealStarted.value.players.slice(setterIndex),
+      ...revealStarted.value.players.slice(0, setterIndex),
+    ];
+    const assignments = assignReaders(revealRound.notes, readerOrder);
     if (!assignments.ok) return failure("NOTE_SUBMISSION_FAILED", assignments.errors.join(" "));
+    const revealSequence = orderRevealSequence(revealRound.notes, assignments.value, readerOrder);
+    if (revealSequence.length !== revealRound.notes.length) {
+      return failure("NOTE_SUBMISSION_FAILED", "The ordered reveal sequence could not include every note.");
+    }
     return {
       ok: true,
       value: {
         ...revealStarted.value,
         pausedPhase: (revealStarted.value.disconnectedPlayerIds?.length ?? 0) > 0 ? "REVEALING" : null,
         rounds: revealStarted.value.rounds.map((item) => item.id === revealRound.id
-          ? { ...item, readerAssignments: assignments.value, revealIndex: 0 }
+          ? { ...item, revealSequence, readerAssignments: assignments.value, revealIndex: 0 }
           : item),
       } as Room,
     };
