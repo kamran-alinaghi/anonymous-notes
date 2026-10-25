@@ -158,9 +158,10 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
       // Reconnect one at a time; the game must remain paused until the second player returns.
       for (let index = 0; index < choosingDisconnects.length; index += 1) {
         const player = choosingDisconnects[index]!;
+        const oldToken = tokens.get(player.nickname)!;
         const restoredPeer = peer();
         await connect(restoredPeer);
-        restoredPeer.send({ type: "RECONNECT", requestId: `reconnect-choosing-${index}`, sessionToken: tokens.get(player.nickname) });
+        restoredPeer.send({ type: "RECONNECT", requestId: `reconnect-choosing-${index}`, sessionToken: oldToken });
         const restored = await message(restoredPeer, "SESSION_RESTORED", `reconnect-choosing-${index}`);
         expect(restored.nickname).toBe(player.nickname);
         clients.set(player.nickname, restoredPeer);
@@ -173,7 +174,7 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
 
           const replay = peer();
           await connect(replay);
-          replay.send({ type: "RECONNECT", requestId: "replay-old-token", sessionToken: created.sessionToken });
+          replay.send({ type: "RECONNECT", requestId: "replay-old-token", sessionToken: oldToken });
           await expect(message(replay, "ERROR", "replay-old-token")).resolves.toMatchObject({
             error: { code: "INVALID_SESSION_CREDENTIAL" },
           });
