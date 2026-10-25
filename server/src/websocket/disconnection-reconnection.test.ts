@@ -292,8 +292,13 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
       }
       const offlineSubmissionProgress = await host.nextMatching((item) =>
         item.type === "SUBMISSION_PROGRESS_UPDATED" &&
-        (item.progress as { players?: Array<{ playerId: string; submitted: boolean }> }).players
-          ?.some((player) => player.playerId === firstAuthor.id && player.submitted === false));
+        ((item.progress as {
+          players?: Array<{ playerId: string; submitted: boolean }>;
+        }).players?.some(
+          (player) =>
+            player.playerId === firstAuthor.id && player.submitted === false,
+        ) ?? false),
+      );
       expect(offlineSubmissionProgress.type).toBe("SUBMISSION_PROGRESS_UPDATED");
 
       room = store.getByCode("EAEAAA")!;
@@ -378,6 +383,9 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
         item.type === "WAITING_FOR_PLAYERS" &&
         Array.isArray(item.disconnectedPlayers) &&
         item.disconnectedPlayers.some((player: { nickname: string }) => player.nickname === finalDisconnect.nickname));
+      expect(store.getByCode("EAEAAA")?.disconnectedPlayerIds).toContain(
+        finalDisconnect.id,
+      );
       host.send({ type: "TERMINATE_GAME", requestId: "terminate" });
       await message(host, "GAME_TERMINATED", "terminate");
       expect(store.getByCode("EAEAAA")?.phase).toBe("FINISHED");
