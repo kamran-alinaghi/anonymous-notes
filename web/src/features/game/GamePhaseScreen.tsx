@@ -202,7 +202,7 @@ export function GamePhaseScreen({
             )}
           </div>
           {(viewerRole === "HOST" || Boolean(revealState?.displayNote)) && (
-            <div className="reveal-controls">
+            <div className={viewerRole === "HOST" ? "reveal-controls" : "reveal-controls reader-reveal-controls"}>
               {viewerRole === "HOST" && (
                 <button
                   className="secondary-button"
