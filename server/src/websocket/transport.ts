@@ -322,7 +322,7 @@ export class WebSocketTransport {
       this.trySend(socket, safeError("STALE_SESSION", "The room or player identity no longer exists.", requestId));
       return;
     }
-    if (!lifecycleState.ok) return;
+    if (!lifecycleState || !lifecycleState.ok) return;
 
     this.reconnectCredentials.delete(presentedToken);
     if (this.credentialByIdentity.get(key) === presentedToken) this.credentialByIdentity.delete(key);
