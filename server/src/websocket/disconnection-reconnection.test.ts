@@ -196,7 +196,7 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
         item.type === "PLAYER_CONNECTIONS_UPDATED" && item.paused === false &&
         item.disconnectedPlayers.some((player: { playerId: string }) => player.playerId === writingDisconnect.id));
 
-      const firstAuthor = room.players.find((player) => player.id !== writingDisconnect.id)!;
+      const firstAuthor = room.players.find((player) => player.id !== writingDisconnect.id && player.id !== room.host.id)!;
       const firstAuthorClient = clients.get(firstAuthor.nickname)!;
       const draftsFor = (authorId: string) => room.players
         .filter((player) => player.id !== authorId)
@@ -226,7 +226,14 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
       tokens.set(writingDisconnect.nickname, writingRestored.sessionToken);
       expect(store.getByCode("EAEAAA")?.disconnectedPlayerIds).toEqual([]);
 
-      // Finish all remaining batches. The server's original round data is retained.
+      // A player who already submitted disconnects before the last batch. Their old
+      // submission remains stored, but they do not count as submitted while offline.
+      await clients.get(firstAuthor.nickname)!.closeAndWait();
+      await host.nextMatching((item) =>
+        item.type === "PLAYER_CONNECTIONS_UPDATED" && item.paused === false &&
+        item.disconnectedPlayers.some((player: { playerId: string }) => player.playerId === firstAuthor.id));
+
+      // Finish all remaining batches. Reveal must wait for the disconnected author to return.
       for (const player of store.getByCode("EAEAAA")!.players) {
         const current = store.getByCode("EAEAAA")!;
         const round = current.rounds.find((item) => item.id === current.currentRoundId)!;
@@ -240,6 +247,22 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
         });
         await message(authorClient, "NOTE_BATCH_ACCEPTED", `submit-${player.id}`);
       }
+      room = store.getByCode("EAEAAA")!;
+      expect(room.phase).toBe("WRITING");
+      expect(room.rounds[0]?.notes).toHaveLength(room.players.length * (room.players.length - 1));
+
+      const finalWriterReconnect = peer();
+      await connect(finalWriterReconnect);
+      finalWriterReconnect.send({
+        type: "RECONNECT",
+        requestId: "reconnect-final-writer",
+        sessionToken: tokens.get(firstAuthor.nickname),
+      });
+      const finalWriterRestored = await message(finalWriterReconnect, "SESSION_RESTORED", "reconnect-final-writer");
+      clients.set(firstAuthor.nickname, finalWriterReconnect);
+      tokens.set(firstAuthor.nickname, finalWriterRestored.sessionToken);
+      await message(host, "REVEAL_STATE_UPDATED");
+
       room = store.getByCode("EAEAAA")!;
       expect(room.phase).toBe("REVEALING");
       expect(room.pausedPhase).toBeNull();
