@@ -431,6 +431,65 @@ describe("WebSocket transport integration", () => {
         expect(nextStates.every((message) => message.type === "REVEAL_STATE_UPDATED")).toBe(true);
         expect(nextStates.every((message) => (message.state as { position: number }).position === 1)).toBe(true);
         expect(nextStates.filter((message) => Object.hasOwn(message.state as object, "displayNote"))).toHaveLength(1);
+
+        host.send({ type: "COMPLETE_ROUND", requestId: "premature-complete" });
+        expect(await host.nextMessage()).toMatchObject({
+          type: "ERROR",
+          requestId: "premature-complete",
+          error: { code: "ROUND_NOT_COMPLETE" },
+        });
+
+        for (let position = 2; position < 12; position += 1) {
+          host.send({ type: "NAVIGATE_REVEAL", requestId: "advance-" + position, action: "NEXT" });
+          expect(await host.nextMessage()).toMatchObject({
+            type: "REVEAL_NAVIGATED",
+            requestId: "advance-" + position,
+            position,
+            total: 12,
+          });
+          const states = await Promise.all(clients.map((client) => client.nextMessage()));
+          expect(states.every((message) => message.type === "REVEAL_STATE_UPDATED")).toBe(true);
+          expect(states.every((message) => (message.state as { position: number }).position === position)).toBe(true);
+        }
+
+        players[0]!.send({ type: "COMPLETE_ROUND", requestId: "unauthorized-complete" });
+        expect(await players[0]!.nextMessage()).toMatchObject({
+          type: "ERROR",
+          requestId: "unauthorized-complete",
+          error: { code: "UNAUTHORIZED" },
+        });
+
+        host.send({ type: "COMPLETE_ROUND", requestId: "complete-round" });
+        expect(await host.nextMessage()).toMatchObject({
+          type: "ROUND_COMPLETED",
+          requestId: "complete-round",
+          room: { phase: "ROUND_COMPLETE", currentRoundNumber: 1 },
+        });
+        const completedUpdates = await Promise.all(clients.map((client) => client.nextMessage()));
+        expect(completedUpdates.every((message) => message.type === "GAME_STATE_UPDATED")).toBe(true);
+        expect(completedUpdates.every((message) => (message.room as { phase: string }).phase === "ROUND_COMPLETE")).toBe(true);
+
+        host.send({ type: "COMPLETE_ROUND", requestId: "duplicate-complete" });
+        expect(await host.nextMessage()).toMatchObject({
+          type: "ERROR",
+          requestId: "duplicate-complete",
+          error: { code: "ROOM_UNAVAILABLE" },
+        });
+
+        host.send({ type: "START_NEXT_ROUND", requestId: "next-round" });
+        expect(await host.nextMessage()).toMatchObject({
+          type: "NEXT_ROUND_STARTED",
+          requestId: "next-round",
+          room: {
+            phase: "CHOOSING_SUBJECT",
+            currentRoundNumber: 2,
+            currentSubjectSetterNickname: "Player1",
+            subject: null,
+          },
+        });
+        const nextRoundUpdates = await Promise.all(clients.map((client) => client.nextMessage()));
+        expect(nextRoundUpdates.every((message) => message.type === "GAME_STATE_UPDATED")).toBe(true);
+        expect(nextRoundUpdates.every((message) => (message.room as { phase: string }).phase === "CHOOSING_SUBJECT")).toBe(true);
       }
     }
   });
