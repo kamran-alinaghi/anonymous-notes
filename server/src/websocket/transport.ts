@@ -2,6 +2,7 @@ import type { Room } from "../domain/types.js";
 import type { GameManagementService } from "../game/game-management.js";
 import type { LobbyManagementService } from "../lobby/lobby-management.js";
 import type { NoteSubmissionService, NoteSubmissionProgress } from "../notes/note-submission.js";
+import type { RevealSessionService, RevealViewer } from "../reveal/reveal-session.js";
 import type { RoomManagementService } from "../rooms/room-management.js";
 import {
   parseIncomingMessage,
@@ -83,6 +84,7 @@ export class WebSocketTransport {
     private readonly lobbyManagement?: LobbyManagementService,
     private readonly gameManagement?: GameManagementService,
     private readonly noteSubmission?: NoteSubmissionService,
+    private readonly revealSession?: RevealSessionService,
   ) {
     this.sessions = new ConnectionSessions(generateConnectionId);
   }
@@ -135,6 +137,14 @@ export class WebSocketTransport {
       }
       if (parsed.message.type === "SUBMIT_NOTE_BATCH") {
         this.handleSubmitNoteBatch(socket, session, parsed.message.requestId, parsed.message.notes);
+        return;
+      }
+      if (parsed.message.type === "GET_REVEAL_STATE") {
+        this.handleGetRevealState(socket, session, parsed.message.requestId);
+        return;
+      }
+      if (parsed.message.type === "NAVIGATE_REVEAL") {
+        this.handleNavigateReveal(socket, session, parsed.message.requestId, parsed.message.action);
         return;
       }
 
@@ -323,6 +333,77 @@ export class WebSocketTransport {
       progress: submissionProgressView(result.value.progress, session.role === "HOST"),
     });
     this.broadcastSubmissionProgress(result.value.progress);
+    if (result.value.room.phase === "REVEALING") this.broadcastRevealState(result.value.room.code);
+  }
+
+  private handleGetRevealState(
+    socket: SessionConnection,
+    session: ConnectionSession,
+    requestId: string,
+  ): void {
+    if ((session.role !== "HOST" && session.role !== "PLAYER") || !session.roomCode) {
+      this.trySend(socket, safeError("UNAUTHORIZED", "An authenticated room member is required.", requestId));
+      return;
+    }
+    if (!this.revealSession) {
+      this.trySend(socket, safeError("REVEAL_UNAVAILABLE", "Reveal session is unavailable.", requestId));
+      return;
+    }
+    const viewer: RevealViewer = {
+      role: session.role,
+      hostId: session.hostId,
+      playerId: session.playerId,
+    };
+    const result = this.revealSession.getViewerState(session.roomCode, viewer);
+    if (!result.ok) {
+      this.trySend(socket, safeError(result.error.code, result.error.message, requestId));
+      return;
+    }
+    this.trySend(socket, { type: "REVEAL_STATE", requestId, state: result.value });
+  }
+
+  private handleNavigateReveal(
+    socket: SessionConnection,
+    session: ConnectionSession,
+    requestId: string,
+    action: "NEXT" | "PREVIOUS",
+  ): void {
+    if (session.role !== "HOST" || !session.hostId || !session.roomCode) {
+      this.trySend(socket, safeError("UNAUTHORIZED", "Only the authenticated room host may navigate the reveal.", requestId));
+      return;
+    }
+    if (!this.revealSession) {
+      this.trySend(socket, safeError("REVEAL_UNAVAILABLE", "Reveal session is unavailable.", requestId));
+      return;
+    }
+    const result = this.revealSession.navigate(session.roomCode, session.hostId, action);
+    if (!result.ok) {
+      this.trySend(socket, safeError(result.error.code, result.error.message, requestId));
+      return;
+    }
+    this.trySend(socket, {
+      type: "REVEAL_NAVIGATED",
+      requestId,
+      position: result.value.position,
+      total: result.value.total,
+    });
+    this.broadcastRevealState(session.roomCode);
+  }
+
+  /** Every connection gets a viewer-specific projection; private contents are never room-broadcast. */
+  private broadcastRevealState(roomCode: string): void {
+    if (!this.revealSession) return;
+    for (const [session, socket] of this.sessions.getConnectionsSnapshot()) {
+      if (session.roomCode !== roomCode || (session.role !== "HOST" && session.role !== "PLAYER")) continue;
+      const viewer: RevealViewer = {
+        role: session.role,
+        hostId: session.hostId,
+        playerId: session.playerId,
+      };
+      const result = this.revealSession.getViewerState(roomCode, viewer);
+      if (!result.ok) continue;
+      this.trySend(socket, { type: "REVEAL_STATE_UPDATED", state: result.value });
+    }
   }
 
   private broadcastSubmissionProgress(progress: NoteSubmissionProgress): void {
