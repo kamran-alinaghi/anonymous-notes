@@ -196,6 +196,60 @@ describe("WebSocket transport integration", () => {
     });
   });
 
+  it("broadcasts successful lobby changes with host-only order and rejects unauthorized reorders", async () => {
+    const { peer } = await setup();
+    const host = peer();
+    const playerA = peer();
+    const playerB = peer();
+    await Promise.all([connected(host), connected(playerA), connected(playerB)]);
+
+    host.send({ type: "CREATE_ROOM", requestId: "create", revealMode: "SINGLE_DEVICE", hostNickname: "Moderator" });
+    const created = await host.nextMessage();
+    const hostView = (created.room as { players: Array<{ id: string; nickname: string }> });
+    expect(hostView.players).toEqual([]);
+
+    playerA.send({ type: "JOIN_ROOM", requestId: "join-a", roomCode: "AAAAAA", nickname: "Alpha" });
+    const joinedA = await playerA.nextMessage();
+    expect(joinedA.type).toBe("ROOM_JOINED");
+    expect(joinedA.room).not.toHaveProperty("players");
+    expect((await host.nextMessage()).type).toBe("LOBBY_UPDATED");
+    expect((await playerA.nextMessage()).type).toBe("LOBBY_UPDATED");
+
+    playerB.send({ type: "JOIN_ROOM", requestId: "join-b", roomCode: "AAAAAA", nickname: "Beta" });
+    expect((await playerB.nextMessage()).type).toBe("ROOM_JOINED");
+    const hostAfterJoin = await host.nextMessage();
+    const hostRoom = hostAfterJoin.room as { players: Array<{ id: string; nickname: string }>; playerCount: number };
+    expect(hostRoom.playerCount).toBe(2);
+    expect(hostRoom.players.map((player) => player.nickname)).toEqual(["Alpha", "Beta"]);
+    expect((await playerA.nextMessage()).room).not.toHaveProperty("players");
+    const playerBUpdate = await playerB.nextMessage();
+    expect(playerBUpdate.type).toBe("LOBBY_UPDATED");
+    expect(playerBUpdate.room).not.toHaveProperty("players");
+
+    playerA.send({ type: "REORDER_PLAYERS", requestId: "forbidden", playerIds: hostRoom.players.map((p) => p.id).reverse() });
+    expect(await playerA.nextMessage()).toMatchObject({
+      type: "ERROR",
+      requestId: "forbidden",
+      error: { code: "UNAUTHORIZED" },
+    });
+
+    const reversedIds = [...hostRoom.players].reverse().map((player) => player.id);
+    host.send({ type: "REORDER_PLAYERS", requestId: "reorder", playerIds: reversedIds });
+    const response = await host.nextMessage();
+    expect(response).toMatchObject({
+      type: "PLAYER_ORDER_UPDATED",
+      requestId: "reorder",
+      room: { players: [{ id: reversedIds[0] }, { id: reversedIds[1] }] },
+    });
+    expect((await host.nextMessage()).type).toBe("LOBBY_UPDATED");
+    const updateA = await playerA.nextMessage();
+    const updateB = await playerB.nextMessage();
+    expect(updateA.room).not.toHaveProperty("players");
+    expect(updateB.room).not.toHaveProperty("players");
+    expect(updateA.room).toMatchObject({ playerCount: 2, viewerRole: "PLAYER" });
+    expect(updateB.room).toMatchObject({ playerCount: 2, viewerRole: "PLAYER" });
+  });
+
   it("unregisters a disconnected connection without removing room membership", async () => {
     const { peer } = await setup();
     const client = peer();
