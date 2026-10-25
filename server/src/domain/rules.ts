@@ -238,57 +238,53 @@ export function submitNoteBatch(
   } as Room);
 }
 
-export type RandomSource = () => number;
-
-function randomIndex(length: number, random: RandomSource): number {
-  const sample = random();
-  const bounded = Number.isFinite(sample) ? Math.min(Math.max(sample, 0), 0.9999999999999999) : 0;
-  return Math.floor(bounded * length);
+/** Creates a stable note sequence without randomizing authorship/reader order. */
+export function createRevealSequence(notes: readonly Note[]): NoteId[] {
+  return notes.map((note) => note.id);
 }
 
-/** Fisher–Yates shuffle; callers may inject deterministic randomness for tests. */
-export function createRevealSequence(notes: readonly Note[], random: RandomSource = Math.random): NoteId[] {
-  const sequence = notes.map((note) => note.id);
-  for (let i = sequence.length - 1; i > 0; i -= 1) {
-    const j = randomIndex(i + 1, random);
-    [sequence[i], sequence[j]] = [sequence[j]!, sequence[i]!];
-  }
-  return sequence;
-}
-
-/** Stores the sequence once; later calls during reveal preserve the existing order. */
-export function beginReveal(room: Room, random: RandomSource = Math.random): DomainResult<Room> {
+/** Stores an initial stable sequence once; the application layer groups it by assigned reader. */
+export function beginReveal(room: Room): DomainResult<Room> {
   if (room.phase !== "REVEALING") return failure("Reveal sequence can only be initialized during REVEALING.");
   const round = getCurrentRound(room);
   if (!round) return failure("There is no current round.");
   if (round.revealSequence !== null) return success(room);
-  const sequence = createRevealSequence(round.notes, random);
+  const sequence = createRevealSequence(round.notes);
   return success({
     ...room,
     rounds: room.rounds.map((item) => item.id === round.id ? { ...item, revealSequence: sequence } : item),
   } as Room);
 }
 
-/** Assigns each note to an eligible reader, minimizing the current assignment count. */
+/** Assigns each note to an eligible reader deterministically, preferring the least-loaded reader in the supplied order. */
 export function assignReaders(
   notes: readonly Note[],
-  players: readonly Player[],
-  random: RandomSource = Math.random,
+  orderedPlayers: readonly Player[],
 ): DomainResult<Round["readerAssignments"]> {
   const assignments: Round["readerAssignments"] = [];
-  const counts = new Map<PlayerId, number>(players.map((player) => [player.id, 0]));
+  const counts = new Map<PlayerId, number>(orderedPlayers.map((player) => [player.id, 0]));
   for (const note of notes) {
-    const eligible = players.filter((player) =>
+    const eligible = orderedPlayers.filter((player) =>
       player.id !== note.authorPlayerId && player.id !== note.targetPlayerId);
     if (eligible.length === 0) return failure(`No eligible reader for note "${note.id}".`);
     const leastCount = Math.min(...eligible.map((player) => counts.get(player.id) ?? 0));
-    const tied = eligible.filter((player) => (counts.get(player.id) ?? 0) === leastCount);
-    const reader = tied[randomIndex(tied.length, random)];
+    const reader = eligible.find((player) => (counts.get(player.id) ?? 0) === leastCount);
     if (!reader) return failure(`Could not choose a reader for note "${note.id}".`);
     assignments.push({ noteId: note.id, readerPlayerId: reader.id });
     counts.set(reader.id, (counts.get(reader.id) ?? 0) + 1);
   }
   return success(assignments);
+}
+
+/** Orders notes by the host-defined player order, rotated so the current subject setter reads first. */
+export function orderRevealSequence(
+  notes: readonly Note[],
+  assignments: readonly Round["readerAssignments"][number][],
+  readerOrder: readonly Player[],
+): NoteId[] {
+  const readerByNoteId = new Map(assignments.map((assignment) => [assignment.noteId, assignment.readerPlayerId]));
+  return readerOrder.flatMap((reader) =>
+    notes.filter((note) => readerByNoteId.get(note.id) === reader.id).map((note) => note.id));
 }
 
 /** Explicit allow-list projection: internal authorship and target identity never leave the domain layer. */
