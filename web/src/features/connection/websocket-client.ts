@@ -60,12 +60,6 @@ export interface WebSocketClientOptions {
 
 const OPEN = 1;
 const CONNECTING = 0;
-const RETRYABLE_SESSION_ERRORS = new Set([
-  "INVALID_SESSION_CREDENTIAL",
-  "STALE_SESSION",
-  "SESSION_ALREADY_CONNECTED",
-]);
-
 export class WebSocketClient {
   private readonly createSocket: (url: string) => WebSocketLike;
   private readonly tokenStorage: SessionTokenStorage;
@@ -273,10 +267,7 @@ export class WebSocketClient {
       const pending = typeof errorMessage.requestId === "string"
         ? this.pending.get(errorMessage.requestId)
         : undefined;
-      if (pending?.type === "RECONNECT" || (
-        errorMessage.requestId === this.awaitingReconnectRequestId &&
-        RETRYABLE_SESSION_ERRORS.has(errorMessage.error.code)
-      )) {
+      if (pending?.type === "RECONNECT" || errorMessage.requestId === this.awaitingReconnectRequestId) {
         this.tokenStorage.clear();
         this.awaitingReconnectRequestId = null;
         this.ready = true;
