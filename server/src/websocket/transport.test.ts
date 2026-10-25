@@ -6,6 +6,7 @@ import { RoomManagementService } from "../rooms/room-management.js";
 import { LobbyManagementService } from "../lobby/lobby-management.js";
 import { GameManagementService } from "../game/game-management.js";
 import { NoteSubmissionService } from "../notes/note-submission.js";
+import { RevealSessionService } from "../reveal/reveal-session.js";
 
 type WireMessage = Record<string, unknown>;
 
@@ -78,12 +79,14 @@ describe("WebSocket transport integration", () => {
     const gameManagement = new GameManagementService(store, { generateRoundId: () => "round-" + (++roundId) });
     let noteId = 0;
     const noteSubmission = new NoteSubmissionService(store, { generateNoteId: () => "note-" + (++noteId) });
+    const revealSession = new RevealSessionService(store);
     let connectionId = 0;
     const serverApp = await buildApp({
       roomManagement,
       lobbyManagement,
       gameManagement,
       noteSubmission,
+      revealSession,
       generateConnectionId: () => `connection-${++connectionId}`,
     });
     app = serverApp;
@@ -401,6 +404,33 @@ describe("WebSocket transport integration", () => {
       }
       if (author.id === hostRoom.players[hostRoom.players.length - 1]?.id) {
         expect(accepted.progress).toMatchObject({ phase: "REVEALING", submittedCount: 4, totalPlayerCount: 4 });
+
+        const initialStates = await Promise.all(clients.map((client) => client.nextMessage()));
+        expect(initialStates.every((message) => message.type === "REVEAL_STATE_UPDATED")).toBe(true);
+        expect(initialStates.filter((message) => Object.hasOwn(message.state as object, "displayNote"))).toHaveLength(1);
+        for (const message of initialStates) {
+          expect(JSON.stringify(message)).not.toContain("authorPlayerId");
+          expect(JSON.stringify(message)).not.toContain("targetPlayerId");
+        }
+
+        players[0]!.send({ type: "NAVIGATE_REVEAL", requestId: "player-navigation", action: "NEXT" });
+        expect(await players[0]!.nextMessage()).toMatchObject({
+          type: "ERROR",
+          requestId: "player-navigation",
+          error: { code: "UNAUTHORIZED" },
+        });
+
+        host.send({ type: "NAVIGATE_REVEAL", requestId: "host-next", action: "NEXT", position: 99 });
+        expect(await host.nextMessage()).toMatchObject({
+          type: "REVEAL_NAVIGATED",
+          requestId: "host-next",
+          position: 1,
+          total: 12,
+        });
+        const nextStates = await Promise.all(clients.map((client) => client.nextMessage()));
+        expect(nextStates.every((message) => message.type === "REVEAL_STATE_UPDATED")).toBe(true);
+        expect(nextStates.every((message) => (message.state as { position: number }).position === 1)).toBe(true);
+        expect(nextStates.filter((message) => Object.hasOwn(message.state as object, "displayNote"))).toHaveLength(1);
       }
     }
   });
