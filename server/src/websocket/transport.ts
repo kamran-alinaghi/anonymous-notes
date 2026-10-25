@@ -176,7 +176,13 @@ export class WebSocketTransport {
       void this.handleMessage(socket, data);
     });
     socket.on("close", () => this.handleDisconnect(socket));
-    socket.on("error", () => this.handleDisconnect(socket));
+    socket.on("error", () => {
+      this.runtimeOptions.logger?.warn(
+        { event: "websocket_socket_error", connectionId: session.connectionId },
+        "WebSocket transport reported an error",
+      );
+      this.handleDisconnect(socket);
+    });
   }
 
   private send(socket: SessionConnection, message: OutgoingMessage): void {
