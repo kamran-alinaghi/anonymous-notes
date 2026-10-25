@@ -102,7 +102,7 @@ describe("RevealSessionService", () => {
     expect(hostView.ok).toBe(true);
     if (hostView.ok) {
       expect(hostView.value.displayNote).toEqual({
-        content: "private p1 to p2",
+        content: "private note 1",
         targetNickname: "Blair",
       });
       expect(JSON.stringify(hostView.value)).not.toContain("authorPlayerId");
