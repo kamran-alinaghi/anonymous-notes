@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 
@@ -18,7 +19,7 @@ export async function buildApp(options: AppOptions = {}) {
     new RoomManagementService(new InMemoryRoomStore());
   const transport = new WebSocketTransport(
     roomManagement,
-    options.generateConnectionId ?? (() => crypto.randomUUID()),
+    options.generateConnectionId ?? randomUUID,
   );
 
   await app.register(websocket);
