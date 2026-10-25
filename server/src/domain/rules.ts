@@ -84,9 +84,10 @@ export function validateRoom(room: Room): DomainResult<Room> {
 }
 
 export function validateSubject(subject: string): DomainResult<string> {
-  if (subject.trim().length === 0) return failure("Subject must not be empty.");
-  if (subject.length > MAX_SUBJECT_LENGTH) return failure(`Subject must be at most ${MAX_SUBJECT_LENGTH} characters.`);
-  return success(subject);
+  const normalized = subject.trim();
+  if (normalized.length === 0) return failure("Subject must not be empty.");
+  if (normalized.length > MAX_SUBJECT_LENGTH) return failure(`Subject must be at most ${MAX_SUBJECT_LENGTH} characters after trimming.`);
+  return success(normalized);
 }
 
 function getCurrentRound(room: Room): Round | undefined {
@@ -198,8 +199,9 @@ export function validateNoteBatch(
     }
     if (seenTargets.has(draft.targetPlayerId)) errors.push(`Duplicate recipient "${draft.targetPlayerId}".`);
     seenTargets.add(draft.targetPlayerId);
-    if (draft.content.trim().length === 0) errors.push("Note content must not be empty.");
-    if (draft.content.length > MAX_NOTE_LENGTH) errors.push(`Note content must be at most ${MAX_NOTE_LENGTH} characters.`);
+    const normalizedContent = draft.content.trim();
+    if (normalizedContent.length === 0) errors.push("Note content must not be empty.");
+    if (normalizedContent.length > MAX_NOTE_LENGTH) errors.push(`Note content must be at most ${MAX_NOTE_LENGTH} characters after trimming.`);
     if (!draft.id.trim()) errors.push("Note id must not be empty.");
     if (seenNoteIds.has(draft.id) || round.notes.some((note) => note.id === draft.id)) {
       errors.push(`Duplicate note id "${draft.id}".`);
@@ -216,7 +218,7 @@ export function validateNoteBatch(
     id: draft.id,
     authorPlayerId,
     targetPlayerId: draft.targetPlayerId,
-    content: draft.content,
+    content: draft.content.trim(),
   })));
 }
 
