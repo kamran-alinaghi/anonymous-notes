@@ -227,11 +227,11 @@ export function GamePhaseScreen({
       {room.phase !== "CHOOSING_SUBJECT" && room.phase !== "WRITING" && room.phase !== "REVEALING" && (
         <>
           <p className="welcome-copy compact-copy">
-            {room.phase === "REVEALING"
-              ? "All notes have been submitted. The reveal screen is the next step."
-              : room.phase === "ROUND_COMPLETE"
-                ? "This round is complete. Waiting for the host to continue."
-                : "This game has finished."}
+            {room.phase === "ROUND_COMPLETE"
+              ? "This round is complete. Waiting for the host to continue."
+              : room.phase === "FINISHED"
+                ? "This game has finished."
+                : "The game is waiting for the next phase."}
           </p>
           <div className="room-code-card"><span>ROOM CODE</span><strong>{room.roomCode}</strong></div>
         </>
