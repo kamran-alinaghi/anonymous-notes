@@ -75,7 +75,7 @@ describe("NoteSubmissionService", () => {
       [...valid.slice(0, -1), { targetPlayerId: "unknown", content: "Unknown target" }],
       [valid[0]!, valid[0]!, ...valid.slice(2)],
       [...valid.slice(0, -1), { targetPlayerId: author.id, content: "Self target" }],
-      [...valid.slice(0, -1), { targetPlayerId: valid[valid.length - 1]!.targetPlayerId, content: "Duplicate target" }],
+      [...valid.slice(0, -1), { targetPlayerId: valid[0]!.targetPlayerId, content: "Duplicate target" }],
       [...valid.slice(0, -1), { targetPlayerId: valid[valid.length - 1]!.targetPlayerId, content: "   " }],
       [...valid.slice(0, -1), { targetPlayerId: valid[valid.length - 1]!.targetPlayerId, content: "x".repeat(1001) }],
     ];
