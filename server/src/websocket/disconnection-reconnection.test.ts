@@ -279,7 +279,7 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
         item.type === "SUBMISSION_PROGRESS_UPDATED" &&
         (item.progress as { players?: Array<{ playerId: string; submitted: boolean }> }).players?.some(
           (player) => player.playerId === firstAuthor.id && player.submitted === false,
-        ));
+        ) ?? false);
       expect(progressAfterDisconnect.type).toBe("SUBMISSION_PROGRESS_UPDATED");
 
       // Finish all remaining batches. Reveal must wait for the disconnected author to return.
