@@ -1,6 +1,6 @@
 import type { GamePhase, RevealMode } from "../domain/types.js";
 
-export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT", "SUBMIT_NOTE_BATCH", "GET_REVEAL_STATE", "NAVIGATE_REVEAL"] as const;
+export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT", "SUBMIT_NOTE_BATCH", "GET_REVEAL_STATE", "NAVIGATE_REVEAL", "COMPLETE_ROUND", "FINISH_GAME", "START_NEXT_ROUND"] as const;
 export type IncomingMessageType = (typeof INCOMING_MESSAGE_TYPES)[number];
 
 export interface CreateRoomRequest {
@@ -59,7 +59,7 @@ export type IncomingMessage =
   | SetSubjectRequest
   | SubmitNoteBatchRequest
   | GetRevealStateRequest
-  | NavigateRevealRequest;
+  | NavigateRevealRequest\n  | CompleteRoundRequest\n  | FinishGameRequest\n  | StartNextRoundRequest;
 
 export interface HostLobbyRoomView {
   roomCode: string;
