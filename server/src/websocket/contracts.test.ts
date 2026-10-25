@@ -51,6 +51,22 @@ describe("WebSocket message contracts", () => {
     });
   });
 
+  it("parses host lobby reorder requests and rejects malformed order payloads", () => {
+    expect(parseIncomingMessage({
+      type: "REORDER_PLAYERS",
+      requestId: "order-1",
+      playerIds: ["p1", "p2"],
+    })).toEqual({
+      ok: true,
+      message: { type: "REORDER_PLAYERS", requestId: "order-1", playerIds: ["p1", "p2"] },
+    });
+    expect(parseIncomingMessage({
+      type: "REORDER_PLAYERS",
+      requestId: "order-2",
+      playerIds: ["p1", 7],
+    })).toMatchObject({ ok: false, requestId: "order-2", code: "MALFORMED_MESSAGE" });
+  });
+
   it("rejects unsupported types consistently and bounds request IDs", () => {
     expect(parseIncomingMessage({ type: "DELETE_ROOM", requestId: "x" })).toMatchObject({
       ok: false,
