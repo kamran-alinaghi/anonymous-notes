@@ -31,10 +31,16 @@ function waitForMessage(
 
 async function openSocket(url: string): Promise<WebSocket> {
   const socket = new WebSocket(url);
-  await new Promise<void>((resolve, reject) => {
-    socket.addEventListener("open", () => resolve(), { once: true });
-    socket.addEventListener("error", () => reject(new Error("WebSocket failed to open.")), { once: true });
-  });
+  const messages: string[] = [];
+  socket.addEventListener("message", (event) => messages.push(String(event.data)));
+  const connected = waitForMessage(socket, messages, (message) => message.includes('"type":"CONNECTED"'));
+  await Promise.all([
+    new Promise<void>((resolve, reject) => {
+      socket.addEventListener("open", () => resolve(), { once: true });
+      socket.addEventListener("error", () => reject(new Error("WebSocket failed to open.")), { once: true });
+    }),
+    connected,
+  ]);
   return socket;
 }
 
