@@ -15,7 +15,7 @@ import {
   validateSubject,
   type NoteDraft,
 } from "./rules.js";
-import type { Note, Player, Room, Round } from "./types.js";
+import type { Note, Player, Room, Round, SingleDeviceRoom } from "./types.js";
 
 const players: Player[] = [
   { id: "p1", nickname: "Alex" },
@@ -33,7 +33,7 @@ const round: Round = {
   readerAssignments: [],
 };
 
-function makeRoom(overrides: Partial<Room> = {}): Room {
+type RoomOverrides = Partial<Omit<SingleDeviceRoom, "revealMode" | "host">> & {\n  revealMode?: Room["revealMode"];\n  host?: Room["host"];\n};\n\nfunction makeRoom(overrides: RoomOverrides = {}): Room {
   const base: Room = {
     id: "room-1",
     code: "ABCDEF",
@@ -264,6 +264,6 @@ describe("reader assignment", () => {
       targetPlayerId: "p2",
       content: "x",
     };
-    expect(assignReaders([note], players.slice(0, 2], () => 0).ok).toBe(false);
+    expect(assignReaders([note], players.slice(0, 2), () => 0).ok).toBe(false);
   });
 });
