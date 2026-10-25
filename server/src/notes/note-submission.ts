@@ -65,7 +65,17 @@ function currentRound(room: Room) {
 function progressFor(room: Room): NoteSubmissionProgress | undefined {
   const round = currentRound(room);
   if (!round) return undefined;
-  const submittedIds = new Set(round.notes.map((note) => note.authorPlayerId));
+  const submittedIds = new Set<string>();
+  const actualIds = new Set(room.players.map((player) => player.id));
+  for (const player of room.players) {
+    const authored = round.notes.filter((note) => note.authorPlayerId === player.id);
+    const targets = new Set(authored.map((note) => note.targetPlayerId));
+    if (authored.length === room.players.length - 1 &&
+        targets.size === room.players.length - 1 &&
+        authored.every((note) => actualIds.has(note.targetPlayerId) && note.targetPlayerId !== player.id)) {
+      submittedIds.add(player.id);
+    }
+  }
   const players = room.players.map((player) => ({
     playerId: player.id,
     nickname: player.nickname,
@@ -105,7 +115,11 @@ export class NoteSubmissionService {
     if (round.notes.some((note) => note.authorPlayerId === authenticatedPlayerId)) {
       return failure("ALREADY_SUBMITTED", "This player has already submitted a batch for this round.");
     }
-    if (!Array.isArray(drafts)) return failure("INVALID_NOTE_BATCH", "A note batch must be an array.");
+    if (!Array.isArray(drafts) || drafts.some((draft) =>
+      typeof draft?.targetPlayerId !== "string" || draft.targetPlayerId.length === 0 ||
+      typeof draft.content !== "string")) {
+      return failure("INVALID_NOTE_BATCH", "A note batch must contain recipient IDs and text content.");
+    }
 
     let operationError: NoteSubmissionResult<never> | undefined;
     let submittedNotes = 0;
