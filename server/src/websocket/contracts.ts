@@ -1,6 +1,6 @@
 import type { GamePhase, RevealMode } from "../domain/types.js";
 
-export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT", "SUBMIT_NOTE_BATCH"] as const;
+export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT", "SUBMIT_NOTE_BATCH", "GET_REVEAL_STATE", "NAVIGATE_REVEAL"] as const;
 export type IncomingMessageType = (typeof INCOMING_MESSAGE_TYPES)[number];
 
 export interface CreateRoomRequest {
@@ -40,13 +40,26 @@ export interface SubmitNoteBatchRequest {
   notes: Array<{ targetPlayerId: string; content: string }>;
 }
 
+export interface GetRevealStateRequest {
+  type: "GET_REVEAL_STATE";
+  requestId: string;
+}
+
+export interface NavigateRevealRequest {
+  type: "NAVIGATE_REVEAL";
+  requestId: string;
+  action: "NEXT" | "PREVIOUS";
+}
+
 export type IncomingMessage =
   | CreateRoomRequest
   | JoinRoomRequest
   | ReorderPlayersRequest
   | StartGameRequest
   | SetSubjectRequest
-  | SubmitNoteBatchRequest;
+  | SubmitNoteBatchRequest
+  | GetRevealStateRequest
+  | NavigateRevealRequest;
 
 export interface HostLobbyRoomView {
   roomCode: string;
@@ -101,6 +114,15 @@ export interface PlayerSubmissionProgressView {
 
 export type SubmissionProgressView = HostSubmissionProgressView | PlayerSubmissionProgressView;
 
+export interface RevealStateView {
+  roomCode: string;
+  revealMode: RevealMode;
+  phase: "REVEALING";
+  position: number;
+  total: number;
+  displayNote?: { content: string; targetNickname?: string };
+}
+
 export type OutgoingMessage =
   | { type: "CONNECTED"; connectionId: string }
   | { type: "ROOM_CREATED"; requestId: string; room: PublicRoomView; sessionRole: "HOST" | "PLAYER"; nickname: string }
@@ -112,6 +134,9 @@ export type OutgoingMessage =
   | { type: "GAME_STATE_UPDATED"; room: GameRoomView }
   | { type: "NOTE_BATCH_ACCEPTED"; requestId: string; submittedNotes: number; progress: SubmissionProgressView }
   | { type: "SUBMISSION_PROGRESS_UPDATED"; progress: SubmissionProgressView }
+  | { type: "REVEAL_STATE"; requestId: string; state: RevealStateView }
+  | { type: "REVEAL_NAVIGATED"; requestId: string; position: number; total: number }
+  | { type: "REVEAL_STATE_UPDATED"; state: RevealStateView }
   | { type: "ERROR"; requestId?: string; error: { code: string; message: string } };
 
 export type MessageParseResult =
@@ -198,6 +223,17 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
       return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "SET_SUBJECT requires subject text." };
     }
     return { ok: true, message: { type: "SET_SUBJECT", requestId, subject: value.subject } };
+  }
+
+  if (value.type === "GET_REVEAL_STATE") {
+    return { ok: true, message: { type: "GET_REVEAL_STATE", requestId } };
+  }
+
+  if (value.type === "NAVIGATE_REVEAL") {
+    if (value.action !== "NEXT" && value.action !== "PREVIOUS") {
+      return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "NAVIGATE_REVEAL requires action NEXT or PREVIOUS." };
+    }
+    return { ok: true, message: { type: "NAVIGATE_REVEAL", requestId, action: value.action } };
   }
 
   if (!Array.isArray(value.notes) || value.notes.length > 100 ||
