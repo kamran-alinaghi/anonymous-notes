@@ -138,3 +138,14 @@ export function isServerMessage(value: unknown): value is ServerMessage {
     !Array.isArray(value) &&
     typeof (value as { type?: unknown }).type === "string";
 }
+
+
+export interface SubmissionProgressView {
+  roomCode: string;
+  phase: GamePhase;
+  roundNumber: number;
+  submittedCount: number;
+  totalPlayerCount: number;
+  viewerRole: "HOST" | "PLAYER";
+  players?: Array<{ playerId: string; nickname: string; submitted: boolean }>;
+}
