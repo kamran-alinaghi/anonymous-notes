@@ -331,6 +331,8 @@ export class WebSocketTransport {
 
     let room = lifecycleState.value.room;
     const wasPaused = lifecycleState.value.paused;
+    let deferredProgress: NoteSubmissionProgress | undefined;
+    let deferredRevealStarted = false;
     if (identity.playerId !== null && this.connectionLifecycle) {
       const reconnected = this.connectionLifecycle.markReconnected(identity.roomCode!, identity.roomId!, identity.playerId);
       if (!reconnected.ok) {
@@ -339,6 +341,14 @@ export class WebSocketTransport {
         return;
       }
       room = reconnected.value;
+    }
+    if (room.phase === "WRITING" && this.noteSubmission) {
+      const finalized = this.noteSubmission.finalizeIfReady(room.code);
+      if (finalized.ok) {
+        room = finalized.value.room;
+        deferredProgress = finalized.value.progress;
+        deferredRevealStarted = finalized.value.transitioned;
+      }
     }
 
     this.trySend(socket, {
@@ -351,6 +361,10 @@ export class WebSocketTransport {
     });
     this.trySend(socket, { type: "GAME_STATE_UPDATED", room: gameRoomView(room) });
     this.broadcastConnectionState(room);
+    if (deferredRevealStarted && deferredProgress) {
+      this.broadcastSubmissionProgress(deferredProgress);
+      this.broadcastGameState(room);
+    }
 
     const currentState = this.connectionLifecycle?.getState(room.code);
     if (wasPaused && currentState?.ok && !currentState.value.paused) {
