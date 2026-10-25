@@ -110,6 +110,22 @@ describe("WebSocket message contracts", () => {
     })).toMatchObject({ ok: false, requestId: "notes-3", code: "MALFORMED_MESSAGE" });
   });
 
+  it("parses reveal state and navigation requests without accepting client-controlled positions", () => {
+    expect(parseIncomingMessage({ type: "GET_REVEAL_STATE", requestId: "reveal-read" })).toEqual({
+      ok: true,
+      message: { type: "GET_REVEAL_STATE", requestId: "reveal-read" },
+    });
+    expect(parseIncomingMessage({ type: "NAVIGATE_REVEAL", requestId: "reveal-next", action: "NEXT", position: 99 })).toEqual({
+      ok: true,
+      message: { type: "NAVIGATE_REVEAL", requestId: "reveal-next", action: "NEXT" },
+    });
+    expect(parseIncomingMessage({ type: "NAVIGATE_REVEAL", requestId: "reveal-bad", action: "JUMP" })).toMatchObject({
+      ok: false,
+      requestId: "reveal-bad",
+      code: "MALFORMED_MESSAGE",
+    });
+  });
+
   it("rejects unsupported types consistently and bounds request IDs", () => {
     expect(parseIncomingMessage({ type: "DELETE_ROOM", requestId: "x" })).toMatchObject({
       ok: false,
