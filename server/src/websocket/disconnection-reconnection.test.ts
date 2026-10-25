@@ -247,6 +247,12 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
         });
         await message(authorClient, "NOTE_BATCH_ACCEPTED", `submit-${player.id}`);
       }
+      const offlineSubmissionProgress = await host.nextMatching((item) =>
+        item.type === "SUBMISSION_PROGRESS_UPDATED" &&
+        (item.progress as { players?: Array<{ playerId: string; submitted: boolean }> }).players
+          ?.some((player) => player.playerId === firstAuthor.id && player.submitted === false));
+      expect(offlineSubmissionProgress.type).toBe("SUBMISSION_PROGRESS_UPDATED");
+
       room = store.getByCode("EAEAAA")!;
       expect(room.phase).toBe("WRITING");
       expect(room.rounds[0]?.notes).toHaveLength(room.players.length * (room.players.length - 1));
