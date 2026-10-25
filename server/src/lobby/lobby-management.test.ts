@@ -42,11 +42,13 @@ describe("LobbyManagementService", () => {
     if (result.ok) expect(result.value.players.map((player) => player.id)).toEqual(ids);
   });
 
-  it.each([
+  const invalidOrders: Array<[string, string[]]> = [
     ["missing", ["id-3"]],
     ["duplicate", ["id-2", "id-2", "id-3"]],
     ["unknown", ["id-2", "id-3", "ghost"]],
-  ])("rejects %s player order atomically", (_label, order) => {
+  ];
+
+  it.each(invalidOrders)("rejects %s player order atomically", (_label, order) => {
     const { lobby, store, hostId, room } = setup();
     const before = store.getByCode(room.code);
     const result = lobby.reorderPlayers(room.code, hostId, order);
