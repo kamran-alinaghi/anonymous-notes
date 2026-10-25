@@ -66,11 +66,13 @@ function progressFor(room: Room): NoteSubmissionProgress | undefined {
   const round = currentRound(room);
   if (!round) return undefined;
   const submittedIds = new Set<string>();
+  const disconnectedIds = new Set(room.disconnectedPlayerIds ?? []);
   const actualIds = new Set(room.players.map((player) => player.id));
   for (const player of room.players) {
     const authored = round.notes.filter((note) => note.authorPlayerId === player.id);
     const targets = new Set(authored.map((note) => note.targetPlayerId));
-    if (authored.length === room.players.length - 1 &&
+    if (!disconnectedIds.has(player.id) &&
+        authored.length === room.players.length - 1 &&
         targets.size === room.players.length - 1 &&
         authored.every((note) => actualIds.has(note.targetPlayerId) && note.targetPlayerId !== player.id)) {
       submittedIds.add(player.id);
@@ -187,6 +189,7 @@ export class NoteSubmissionService {
         }
         return {
           ...revealStarted.value,
+          pausedPhase: (revealStarted.value.disconnectedPlayerIds?.length ?? 0) > 0 ? "REVEALING" : null,
           rounds: revealStarted.value.rounds.map((item) => item.id === revealRound.id
             ? { ...item, readerAssignments: assignments.value, revealIndex: 0 }
             : item),
