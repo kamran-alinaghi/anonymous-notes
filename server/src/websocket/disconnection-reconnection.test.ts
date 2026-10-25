@@ -39,6 +39,12 @@ class Peer {
     this.socket.send(JSON.stringify(message));
   }
 
+  discardQueued(predicate: (message: Message) => boolean): void {
+    for (let index = this.queue.length - 1; index >= 0; index -= 1) {
+      if (predicate(this.queue[index]!)) this.queue.splice(index, 1);
+    }
+  }
+
   async nextMatching(predicate: (message: Message) => boolean, label = "matching message"): Promise<Message> {
     for (;;) {
       const index = this.queue.findIndex(predicate);
@@ -365,6 +371,8 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
 
       // A host can terminate while a player is disconnected; subsequent actions are rejected.
       const finalDisconnect = room.players.find((player) => player.id !== room.host.id)!;
+      // Remove notifications from earlier disconnects so this wait observes the final disconnect.
+      host.discardQueued((item) => item.type === "WAITING_FOR_PLAYERS");
       await clients.get(finalDisconnect.nickname)!.closeAndWait();
       await host.nextMatching((item) =>
         item.type === "WAITING_FOR_PLAYERS" &&
