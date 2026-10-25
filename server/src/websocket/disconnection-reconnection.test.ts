@@ -136,7 +136,7 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
         (item.type === "ERROR" && requestId !== undefined && item.requestId === requestId),
       `${type}${requestId ? ` requestId=${requestId}` : ""}`,
     );
-    if (result.type === "ERROR") {
+    if (result.type === "ERROR" && type !== "ERROR") {
       throw new Error(`Request ${requestId} failed: ${result.error?.code ?? "UNKNOWN"} — ${result.error?.message ?? "No error message"}`);
     }
     return result;
