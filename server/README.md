@@ -37,7 +37,7 @@ All settings are validated at startup. Invalid values stop startup with an error
 | `LOG_LEVEL` | `debug` in development; `info` otherwise | Fastify log level: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`. |
 | `ALLOWED_ORIGINS` | empty outside production | Comma-separated exact HTTP(S) origins allowed to open browser WebSocket connections. Required in production. Do not include paths. |
 | `MAX_WS_CONNECTIONS` | `1000` | Maximum concurrent WebSocket connections per process. |
-| `MAX_WS_MESSAGES_PER_MINUTE` | `120` | Maximum inbound messages per connection in a rolling one-minute window. Exceeding the limit closes that connection. |
+| `MAX_WS_MESSAGES_PER_MINUTE` | `120` | Maximum inbound messages per connection in a one-minute window; the counter resets 60 seconds after the first message in that window. Exceeding the limit closes that connection. |
 | `MAX_WS_MESSAGE_BYTES` | `262144` | Maximum WebSocket message payload size in bytes. Valid range: 1 KiB through 10 MiB. |
 
 Copy `.env.example` to `.env` for local development. Do not commit `.env` or put session tokens, credentials, or other secrets in configuration files. Deployment environments should supply variables through their secret/configuration facility. This server currently has no application secret that must be configured.
