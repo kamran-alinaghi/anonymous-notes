@@ -67,6 +67,22 @@ describe("WebSocket message contracts", () => {
     })).toMatchObject({ ok: false, requestId: "order-2", code: "MALFORMED_MESSAGE" });
   });
 
+  it("parses start-game and subject-selection requests", () => {
+    expect(parseIncomingMessage({ type: "START_GAME", requestId: "start-1" })).toEqual({
+      ok: true,
+      message: { type: "START_GAME", requestId: "start-1" },
+    });
+    expect(parseIncomingMessage({ type: "SET_SUBJECT", requestId: "subject-1", subject: "A topic" })).toEqual({
+      ok: true,
+      message: { type: "SET_SUBJECT", requestId: "subject-1", subject: "A topic" },
+    });
+    expect(parseIncomingMessage({ type: "SET_SUBJECT", requestId: "subject-2", subject: 12 })).toMatchObject({
+      ok: false,
+      requestId: "subject-2",
+      code: "MALFORMED_MESSAGE",
+    });
+  });
+
   it("rejects unsupported types consistently and bounds request IDs", () => {
     expect(parseIncomingMessage({ type: "DELETE_ROOM", requestId: "x" })).toMatchObject({
       ok: false,
