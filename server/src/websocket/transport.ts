@@ -313,13 +313,16 @@ export class WebSocketTransport {
       return;
     }
     const lifecycleState = identity.roomCode ? this.connectionLifecycle?.getState(identity.roomCode) : undefined;
-    if (!lifecycleState?.ok || lifecycleState.value.room.id !== identity.roomId ||
-        (identity.playerId !== null && !lifecycleState.value.room.players.some((player) => player.id === identity.playerId))) {
+    const staleIdentity = !lifecycleState || !lifecycleState.ok ||
+      lifecycleState.value.room.id !== identity.roomId ||
+      (identity.playerId !== null && !lifecycleState.value.room.players.some((player) => player.id === identity.playerId));
+    if (staleIdentity) {
       this.reconnectCredentials.delete(presentedToken);
       if (this.credentialByIdentity.get(key) === presentedToken) this.credentialByIdentity.delete(key);
       this.trySend(socket, safeError("STALE_SESSION", "The room or player identity no longer exists.", requestId));
       return;
     }
+    if (!lifecycleState.ok) return;
 
     this.reconnectCredentials.delete(presentedToken);
     if (this.credentialByIdentity.get(key) === presentedToken) this.credentialByIdentity.delete(key);
