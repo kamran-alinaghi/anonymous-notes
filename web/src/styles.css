@@ -904,3 +904,8 @@ h1 span {
     grid-template-columns: 1fr;
   }
 }
+
+
+.reader-reveal-controls {
+  grid-template-columns: 1fr;
+}
