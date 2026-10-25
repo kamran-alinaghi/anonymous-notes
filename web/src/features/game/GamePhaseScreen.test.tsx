@@ -188,6 +188,8 @@ describe("GamePhaseScreen", () => {
       />,
     );
     expect(screen.getByText("Only the assigned reader sees this")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /next note/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /previous note/i })).not.toBeInTheDocument();
 
     rerender(
       <GamePhaseScreen
