@@ -83,6 +83,33 @@ describe("WebSocket message contracts", () => {
     });
   });
 
+  it("parses note batches without accepting client-supplied author or note IDs", () => {
+    expect(parseIncomingMessage({
+      type: "SUBMIT_NOTE_BATCH",
+      requestId: "notes-1",
+      notes: [{ targetPlayerId: "player-2", content: "Hello" }],
+      authorPlayerId: "forged-author",
+      isHost: true,
+    })).toEqual({
+      ok: true,
+      message: {
+        type: "SUBMIT_NOTE_BATCH",
+        requestId: "notes-1",
+        notes: [{ targetPlayerId: "player-2", content: "Hello" }],
+      },
+    });
+    expect(parseIncomingMessage({
+      type: "SUBMIT_NOTE_BATCH",
+      requestId: "notes-2",
+      notes: [{ targetPlayerId: "player-2", content: "x".repeat(1001) }],
+    })).toMatchObject({ ok: false, requestId: "notes-2", code: "MALFORMED_MESSAGE" });
+    expect(parseIncomingMessage({
+      type: "SUBMIT_NOTE_BATCH",
+      requestId: "notes-3",
+      notes: [{ targetPlayerId: "player-2", content: "ok" }, { targetPlayerId: 5, content: "bad" }],
+    })).toMatchObject({ ok: false, requestId: "notes-3", code: "MALFORMED_MESSAGE" });
+  });
+
   it("rejects unsupported types consistently and bounds request IDs", () => {
     expect(parseIncomingMessage({ type: "DELETE_ROOM", requestId: "x" })).toMatchObject({
       ok: false,
