@@ -241,4 +241,33 @@ describe("WebSocketClient", () => {
     vi.advanceTimersByTime(1_000);
     expect(sockets).toHaveLength(3);
   });
+
+  it("does not request reveal content for a SINGLE_DEVICE player after reconnect", () => {
+    const { client, sockets } = setup("old-token");
+    client.connect();
+    const socket = sockets[0]!;
+    handshake(socket);
+    const reconnect = JSON.parse(socket.sent[0]!) as { requestId: string };
+
+    socket.receive({
+      type: "SESSION_RESTORED",
+      requestId: reconnect.requestId,
+      sessionRole: "PLAYER",
+      nickname: "Player",
+      sessionToken: "new-token",
+      room: {
+        roomCode: "ABCDEF",
+        revealMode: "SINGLE_DEVICE",
+        phase: "REVEALING",
+        hostNickname: "Host",
+        playerCount: 2,
+        players: [{ id: "p1", nickname: "Player" }],
+        currentRoundNumber: 1,
+        currentSubjectSetterNickname: "Host",
+        subject: "A mystery",
+      },
+    });
+
+    expect(socket.sent).toHaveLength(1);
+  });
 });
