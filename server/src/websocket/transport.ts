@@ -715,8 +715,8 @@ export class WebSocketTransport {
     requestId: string,
     action: "NEXT" | "PREVIOUS",
   ): void {
-    if (session.role !== "HOST" || !session.hostId || !session.roomCode) {
-      this.trySend(socket, safeError("UNAUTHORIZED", "Only the authenticated room host may navigate the reveal.", requestId));
+    if ((session.role !== "HOST" && session.role !== "PLAYER") || !session.roomCode) {
+      this.trySend(socket, safeError("UNAUTHORIZED", "An authenticated room member is required to navigate the reveal.", requestId));
       return;
     }
     if (this.rejectIfPaused(socket, session, requestId)) return;
@@ -724,7 +724,12 @@ export class WebSocketTransport {
       this.trySend(socket, safeError("REVEAL_UNAVAILABLE", "Reveal session is unavailable.", requestId));
       return;
     }
-    const result = this.revealSession.navigate(session.roomCode, session.hostId, action);
+    const viewer: RevealViewer = {
+      role: session.role,
+      hostId: session.hostId,
+      playerId: session.playerId,
+    };
+    const result = this.revealSession.navigate(session.roomCode, viewer, action);
     if (!result.ok) {
       this.trySend(socket, safeError(result.error.code, result.error.message, requestId));
       return;
