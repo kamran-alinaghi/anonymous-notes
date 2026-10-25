@@ -1,12 +1,14 @@
 import type { Room } from "../domain/types.js";
 import type { GameManagementService } from "../game/game-management.js";
 import type { LobbyManagementService } from "../lobby/lobby-management.js";
+import type { NoteSubmissionService, NoteSubmissionProgress } from "../notes/note-submission.js";
 import type { RoomManagementService } from "../rooms/room-management.js";
 import {
   parseIncomingMessage,
   type GameRoomView,
   type OutgoingMessage,
   type PublicRoomView,
+  type SubmissionProgressView,
 } from "./contracts.js";
 import { ConnectionSessions, type ConnectionSession, type SessionConnection } from "./sessions.js";
 
@@ -46,6 +48,23 @@ function gameRoomView(room: Room): GameRoomView {
   };
 }
 
+function submissionProgressView(progress: NoteSubmissionProgress, isHost: boolean): SubmissionProgressView {
+  const common = {
+    roomCode: progress.roomCode,
+    phase: progress.phase,
+    roundNumber: progress.roundNumber,
+    submittedCount: progress.submittedCount,
+    totalPlayerCount: progress.totalPlayerCount,
+  };
+  return isHost
+    ? {
+        ...common,
+        viewerRole: "HOST",
+        players: progress.players.map((player) => ({ ...player })),
+      }
+    : { ...common, viewerRole: "PLAYER" };
+}
+
 function safeError(code: string, message: string, requestId?: string): OutgoingMessage {
   return {
     type: "ERROR",
@@ -63,6 +82,7 @@ export class WebSocketTransport {
     generateConnectionId: () => string,
     private readonly lobbyManagement?: LobbyManagementService,
     private readonly gameManagement?: GameManagementService,
+    private readonly noteSubmission?: NoteSubmissionService,
   ) {
     this.sessions = new ConnectionSessions(generateConnectionId);
   }
@@ -111,6 +131,10 @@ export class WebSocketTransport {
       }
       if (parsed.message.type === "SET_SUBJECT") {
         this.handleSetSubject(socket, session, parsed.message.requestId, parsed.message.subject);
+        return;
+      }
+      if (parsed.message.type === "SUBMIT_NOTE_BATCH") {
+        this.handleSubmitNoteBatch(socket, session, parsed.message.requestId, parsed.message.notes);
         return;
       }
 
@@ -270,6 +294,44 @@ export class WebSocketTransport {
     for (const [session, socket] of this.sessions.getConnectionsSnapshot()) {
       if (session.roomCode !== room.code) continue;
       this.trySend(socket, { type: "GAME_STATE_UPDATED", room: view });
+    }
+  }
+
+  private handleSubmitNoteBatch(
+    socket: SessionConnection,
+    session: ConnectionSession,
+    requestId: string,
+    notes: Array<{ targetPlayerId: string; content: string }>,
+  ): void {
+    if ((session.role !== "HOST" && session.role !== "PLAYER") || !session.playerId || !session.roomCode) {
+      this.trySend(socket, safeError("UNAUTHORIZED", "Only an authenticated actual player may submit a note batch.", requestId));
+      return;
+    }
+    if (!this.noteSubmission) {
+      this.trySend(socket, safeError("NOTE_SUBMISSION_UNAVAILABLE", "Note submission is unavailable.", requestId));
+      return;
+    }
+    const result = this.noteSubmission.submitBatch(session.roomCode, session.playerId, notes);
+    if (!result.ok) {
+      this.trySend(socket, safeError(result.error.code, result.error.message, requestId));
+      return;
+    }
+    this.trySend(socket, {
+      type: "NOTE_BATCH_ACCEPTED",
+      requestId,
+      submittedNotes: result.value.submittedNotes,
+      progress: submissionProgressView(result.value.progress, session.role === "HOST"),
+    });
+    this.broadcastSubmissionProgress(result.value.progress);
+  }
+
+  private broadcastSubmissionProgress(progress: NoteSubmissionProgress): void {
+    for (const [session, socket] of this.sessions.getConnectionsSnapshot()) {
+      if (session.roomCode !== progress.roomCode) continue;
+      this.trySend(socket, {
+        type: "SUBMISSION_PROGRESS_UPDATED",
+        progress: submissionProgressView(progress, session.role === "HOST" && session.hostId !== null),
+      });
     }
   }
 
