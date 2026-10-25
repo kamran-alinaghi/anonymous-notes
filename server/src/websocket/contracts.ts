@@ -54,7 +54,7 @@ export interface HostLobbyRoomView {
 export interface PlayerLobbyRoomView {
   roomCode: string;
   revealMode: RevealMode;
-  phase: string;
+  phase: GamePhase;
   hostNickname: string;
   playerCount: number;
   viewerRole: "PLAYER";
