@@ -36,7 +36,7 @@ function disconnectedIds(room: Room): PlayerId[] {
 }
 
 function isPaused(room: Room): boolean {
-  return room.pausedPhase != null && disconnectedIds(room).length > 0;
+  return PAUSABLE_PHASES.includes(room.phase) && disconnectedIds(room).length > 0;
 }
 
 /** Application-level connection lifecycle; it never owns WebSocket objects or credentials. */
