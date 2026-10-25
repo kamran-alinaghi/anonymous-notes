@@ -158,9 +158,10 @@ export class RoundLifecycleService {
         operationError = failure("INVALID_ROOM_STATE", "The next subject setter could not be selected.");
         return undefined;
       }
+      const closedPreviousRound = closeRevealSession(room, previousRound.id);
       const proposed: Room = {
-        ...room,
-        rounds: [...room.rounds, nextRound],
+        ...closedPreviousRound,
+        rounds: [...closedPreviousRound.rounds, nextRound],
         currentRoundId: nextRound.id,
         currentSubjectSetterPlayerId: nextSetter.id,
       };
