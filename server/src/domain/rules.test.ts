@@ -172,7 +172,7 @@ describe("note batch validation and atomic submission", () => {
   it("trims note content before enforcing the 1–1000 character limit", () => {
     const room = writingRoom();
     const valid = draftsFor("p1");
-    valid[0] = { ...valid[0]!, content: "  " + "x".repeat(1000) + "  \\n" };
+    valid[0] = { ...valid[0]!, content: "  " + "x".repeat(1000) + "  \n" };
     const first = submitNoteBatch(room, "p1", valid);
     expect(first.ok).toBe(true);
     if (first.ok) {
