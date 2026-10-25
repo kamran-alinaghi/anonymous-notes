@@ -49,8 +49,13 @@ class WebSocketPeer {
     this.socket.send(JSON.stringify(message));
   }
 
-  close(): void {
-    this.socket.close();
+  async closeAndWait(): Promise<void> {
+    if (this.socket.readyState === WebSocket.CLOSED) return;
+    await new Promise<void>((resolve) => {
+      this.socket.addEventListener("close", () => resolve(), { once: true });
+      this.socket.close();
+      if (this.socket.readyState === WebSocket.CLOSED) resolve();
+    });
   }
 }
 
@@ -59,7 +64,7 @@ describe("WebSocket transport integration", () => {
   const peers: WebSocketPeer[] = [];
 
   afterEach(async () => {
-    for (const peer of peers.splice(0)) peer.close();
+    await Promise.all(peers.splice(0).map((peer) => peer.closeAndWait()));
     if (app) {
       await app.close();
       app = undefined;
