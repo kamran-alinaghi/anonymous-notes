@@ -140,10 +140,14 @@ describe("WebSocket transport integration", () => {
       requestId: "join-1",
       sessionRole: "PLAYER",
       nickname: "Sam",
-      room: { roomCode: "AAAAAA", players: [{ nickname: "Host" }, { nickname: "Sam" }] },
+      room: { roomCode: "AAAAAA", playerCount: 2, viewerRole: "PLAYER" },
     });
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(host.messages).toHaveLength(0);
+    expect(joined.room).not.toHaveProperty("players");
+    const hostUpdate = await host.nextMessage();
+    expect(hostUpdate).toMatchObject({
+      type: "LOBBY_UPDATED",
+      room: { roomCode: "AAAAAA", playerCount: 2, viewerRole: "HOST", players: [{ nickname: "Host" }, { nickname: "Sam" }] },
+    });
     expect(JSON.stringify(joined)).not.toContain("victim");
   });
 
