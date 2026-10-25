@@ -75,7 +75,7 @@ describe("RevealSessionService", () => {
       ok: true,
       value: { position: 1, total: 12 },
     });
-    expect(service.navigate(room.code, room.host.id, "PREVIOUS")).toMatchObject({
+    expect(service.navigate(room.code, { role: "HOST", hostId: room.host.id, playerId: null }, "PREVIOUS")).toMatchObject({
       ok: true,
       value: { position: 0, total: 12 },
     });
@@ -110,7 +110,7 @@ describe("RevealSessionService", () => {
       error: { code: "UNAUTHORIZED" },
     });
 
-    const otherId = players.find((player) => player.id !== readerId && player.id !== noteId)?.id ?? "p4";
+    const otherId = players.find((player) => player.id !== readerId)!.id;
     expect(service.navigate(room.code, { role: "PLAYER", hostId: null, playerId: otherId }, "NEXT")).toMatchObject({
       ok: false,
       error: { code: "UNAUTHORIZED" },
@@ -177,7 +177,7 @@ describe("RevealSessionService", () => {
       rounds: current.rounds.map((round) => ({ ...round, revealIndex: round.revealSequence!.length - 1 })),
     }) as Room);
     const before = store.getByCode(room.code);
-    expect(service.navigate(room.code, room.host.id, "NEXT")).toMatchObject({
+    expect(service.navigate(room.code, { role: "HOST", hostId: room.host.id, playerId: room.revealMode === "SINGLE_DEVICE" ? null : room.host.id }, "NEXT")).toMatchObject({
       ok: false,
       error: { code: "REVEAL_BOUNDARY" },
     });
