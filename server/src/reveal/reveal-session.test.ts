@@ -67,11 +67,11 @@ describe("RevealSessionService", () => {
   it("navigates forward and backward without changing the stored sequence", () => {
     const { store, room, service } = setup();
     const originalSequence = room.rounds[0]!.revealSequence;
-    expect(service.navigate(room.code, room.host.id, "PREVIOUS")).toMatchObject({
+    expect(service.navigate(room.code, { role: "HOST", hostId: room.host.id, playerId: null }, "PREVIOUS")).toMatchObject({
       ok: false,
       error: { code: "REVEAL_BOUNDARY" },
     });
-    expect(service.navigate(room.code, room.host.id, "NEXT")).toMatchObject({
+    expect(service.navigate(room.code, { role: "HOST", hostId: room.host.id, playerId: null }, "NEXT")).toMatchObject({
       ok: true,
       value: { position: 1, total: 12 },
     });
@@ -87,11 +87,34 @@ describe("RevealSessionService", () => {
   it("rejects unauthorized navigation without changing state", () => {
     const { store, room, service } = setup();
     const before = store.getByCode(room.code);
-    expect(service.navigate(room.code, "not-the-host", "NEXT")).toMatchObject({
+    expect(service.navigate(room.code, { role: "HOST", hostId: "not-the-host", playerId: null }, "NEXT")).toMatchObject({
       ok: false,
       error: { code: "UNAUTHORIZED" },
     });
     expect(store.getByCode(room.code)).toEqual(before);
+  });
+
+  it("allows only the assigned reader to advance, and never allows a player to go back", () => {
+    const { room, service } = setup("INDIVIDUAL_DEVICES");
+    const round = room.rounds[0]!;
+    const noteId = round.revealSequence![round.revealIndex ?? 0]!;
+    const readerId = round.readerAssignments.find((item) => item.noteId === noteId)!.readerPlayerId;
+    const reader = { role: "PLAYER" as const, hostId: null, playerId: readerId };
+
+    expect(service.navigate(room.code, reader, "NEXT")).toMatchObject({
+      ok: true,
+      value: { position: 1, total: 12 },
+    });
+    expect(service.navigate(room.code, reader, "PREVIOUS")).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHORIZED" },
+    });
+
+    const otherId = players.find((player) => player.id !== readerId && player.id !== noteId)?.id ?? "p4";
+    expect(service.navigate(room.code, { role: "PLAYER", hostId: null, playerId: otherId }, "NEXT")).toMatchObject({
+      ok: false,
+      error: { code: "UNAUTHORIZED" },
+    });
   });
 
   it("shows target nickname and content only to the SINGLE_DEVICE host", () => {
