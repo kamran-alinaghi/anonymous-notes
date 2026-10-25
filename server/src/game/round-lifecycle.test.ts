@@ -165,17 +165,18 @@ describe("RoundLifecycleService", () => {
   );
 
   it("rotates the subject setter through the fixed player order and wraps around", () => {
-    const { store, room, service } = setup("SINGLE_DEVICE");
-    service.completeRound(room.code, room.host.id);
-    const second = service.startNextRound(room.code, room.host.id);
+    const secondSetup = setup("SINGLE_DEVICE");
+    secondSetup.service.completeRound(secondSetup.room.code, secondSetup.room.host.id);
+    const second = secondSetup.service.startNextRound(secondSetup.room.code, secondSetup.room.host.id);
     expect(second.ok && second.value.currentSubjectSetterPlayerId).toBe("p2");
 
-    store.updateIfPresent(room.code, (current) => ({
+    const wrapSetup = setup("SINGLE_DEVICE");
+    wrapSetup.store.updateIfPresent(wrapSetup.room.code, (current) => ({
       ...current,
-      phase: "ROUND_COMPLETE",
       currentSubjectSetterPlayerId: "p4",
     }));
-    const third = service.startNextRound(room.code, room.host.id);
-    expect(third.ok && third.value.currentSubjectSetterPlayerId).toBe("p1");
+    wrapSetup.service.completeRound(wrapSetup.room.code, wrapSetup.room.host.id);
+    const wrapped = wrapSetup.service.startNextRound(wrapSetup.room.code, wrapSetup.room.host.id);
+    expect(wrapped.ok && wrapped.value.currentSubjectSetterPlayerId).toBe("p1");
   });
 });
