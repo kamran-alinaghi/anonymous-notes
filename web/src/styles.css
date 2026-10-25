@@ -658,3 +658,150 @@ h1 span {
     grid-template-columns: 1fr;
   }
 }
+
+
+.current-subject {
+  color: #e4dcff;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.field-hint,
+.character-count {
+  margin: -2px 0 8px;
+  color: #8e93a6;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.notes-form {
+  margin-top: 10px;
+}
+
+.notes-instruction {
+  margin: 0 0 8px;
+}
+
+.note-draft {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.note-draft label {
+  margin: 0;
+  color: #e7e4f2;
+}
+
+.note-draft label span {
+  color: #c7baff;
+  font-weight: 650;
+}
+
+.note-draft textarea {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 10px;
+  outline: none;
+  background: rgb(9 11 19 / 45%);
+  color: #f4f4f7;
+  line-height: 1.55;
+}
+
+.note-draft textarea:focus-visible {
+  border-color: #bcb0ff;
+  box-shadow: 0 0 0 3px rgb(199 186 255 / 13%);
+}
+
+.note-draft textarea::placeholder {
+  color: #73788b;
+}
+
+.character-count {
+  justify-self: end;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.submission-progress {
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.submission-progress .section-heading {
+  margin-bottom: 12px;
+}
+
+.progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 9%);
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #c7baff;
+  transition: width 180ms ease;
+}
+
+.submission-player-list {
+  display: grid;
+  gap: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.submission-player-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+  color: #d8d6e4;
+  font-size: 0.82rem;
+}
+
+.submission-player-list li:last-child {
+  border-bottom: 0;
+}
+
+.submission-state {
+  color: #a4a7b8;
+}
+
+.submission-state.is-submitted {
+  color: #a6e4c1;
+}
+
+.submission-confirmation {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid rgb(166 228 193 / 20%);
+  border-radius: 13px;
+  background: rgb(166 228 193 / 5%);
+}
+
+.submission-confirmation strong {
+  color: #c8f0d7;
+}
+
+.submission-confirmation > span {
+  color: #aab5b1;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
