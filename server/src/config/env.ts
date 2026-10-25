@@ -68,8 +68,15 @@ export function loadEnv(source: EnvironmentSource = process.env): AppConfig {
   }
 
   const host = source.HOST?.trim() || "127.0.0.1";
-  const hostnamePattern = /^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\\.(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*\\.?$/;
-  if (isIP(host) === 0 && !hostnamePattern.test(host)) {
+  const hostname = host.endsWith(".") ? host.slice(0, -1) : host;
+  const validHostname = hostname.length > 0 &&
+    hostname.length <= 253 &&
+    hostname.split(".").every((label) =>
+      label.length > 0 &&
+      label.length <= 63 &&
+      /^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(label),
+    );
+  if (isIP(host) === 0 && !validHostname) {
     throw new Error("Invalid environment variable HOST: expected a hostname or IP address.");
   }
 
