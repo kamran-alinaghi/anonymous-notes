@@ -124,10 +124,16 @@ describe("Anonymous Note disconnection and reconnection lifecycle", () => {
   }
 
   async function message(peer: Peer, type: string, requestId?: string): Promise<Message> {
-    return peer.nextMatching(
-      (item) => item.type === type && (requestId === undefined || item.requestId === requestId),
+    const result = await peer.nextMatching(
+      (item) =>
+        (item.type === type && (requestId === undefined || item.requestId === requestId)) ||
+        (item.type === "ERROR" && requestId !== undefined && item.requestId === requestId),
       `${type}${requestId ? ` requestId=${requestId}` : ""}`,
     );
+    if (result.type === "ERROR") {
+      throw new Error(`Request ${requestId} failed: ${result.error?.code ?? "UNKNOWN"} — ${result.error?.message ?? "No error message"}`);
+    }
+    return result;
   }
 
   it.each(["SINGLE_DEVICE", "INDIVIDUAL_DEVICES"] as const)(
