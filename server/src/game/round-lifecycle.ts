@@ -30,6 +30,10 @@ function failure<T = never>(code: RoundLifecycleErrorCode, message: string): Rou
   return { ok: false, error: { code, message } };
 }
 
+function isPausedByDisconnection(room: Room): boolean {
+  return room.pausedPhase != null && (room.disconnectedPlayerIds?.length ?? 0) > 0;
+}
+
 function currentRound(room: Room): Round | undefined {
   return room.currentRoundId === null
     ? undefined
@@ -67,6 +71,10 @@ export class RoundLifecycleService {
         operationError = failure("ROOM_UNAVAILABLE", "A round can only be completed during REVEALING.");
         return undefined;
       }
+      if (isPausedByDisconnection(room)) {
+        operationError = failure("ROOM_UNAVAILABLE", "Round progression is paused until every disconnected player reconnects.");
+        return undefined;
+      }
       const round = currentRound(room);
       if (!round || !round.revealSequence || round.revealSequence.length !== round.notes.length ||
           new Set(round.revealSequence).size !== round.notes.length ||
@@ -84,7 +92,8 @@ export class RoundLifecycleService {
         operationError = failure("ROUND_LIFECYCLE_FAILED", transitioned.errors.join(" "));
         return undefined;
       }
-      return closeRevealSession(transitioned.value, round.id);
+      const completed = closeRevealSession(transitioned.value, round.id);
+      return { ...completed, pausedPhase: (completed.disconnectedPlayerIds?.length ?? 0) > 0 ? "ROUND_COMPLETE" : null } as Room;
     });
     if (!updated) {
       if (operationError) return operationError;
@@ -104,13 +113,18 @@ export class RoundLifecycleService {
         operationError = failure("ROOM_UNAVAILABLE", "The game can only be finished from ROUND_COMPLETE.");
         return undefined;
       }
+      if (isPausedByDisconnection(room)) {
+        operationError = failure("ROOM_UNAVAILABLE", "Game progression is paused until every disconnected player reconnects.");
+        return undefined;
+      }
       const transitioned = transitionRoom(room, "FINISHED");
       if (!transitioned.ok) {
         operationError = failure("ROUND_LIFECYCLE_FAILED", transitioned.errors.join(" "));
         return undefined;
       }
       const round = currentRound(transitioned.value);
-      return round ? closeRevealSession(transitioned.value, round.id) : transitioned.value;
+      const finished = round ? closeRevealSession(transitioned.value, round.id) : transitioned.value;
+      return { ...finished, pausedPhase: null } as Room;
     });
     if (!updated) {
       if (operationError) return operationError;
@@ -128,6 +142,10 @@ export class RoundLifecycleService {
       }
       if (room.phase !== "ROUND_COMPLETE") {
         operationError = failure("ROOM_UNAVAILABLE", "Another round can only start from ROUND_COMPLETE.");
+        return undefined;
+      }
+      if (isPausedByDisconnection(room)) {
+        operationError = failure("ROOM_UNAVAILABLE", "Game progression is paused until every disconnected player reconnects.");
         return undefined;
       }
       const previousRound = currentRound(room);
@@ -170,7 +188,7 @@ export class RoundLifecycleService {
         operationError = failure("ROUND_LIFECYCLE_FAILED", transitioned.errors.join(" "));
         return undefined;
       }
-      return transitioned.value;
+      return { ...transitioned.value, pausedPhase: (transitioned.value.disconnectedPlayerIds?.length ?? 0) > 0 ? "CHOOSING_SUBJECT" : null } as Room;
     });
     if (!updated) {
       if (operationError) return operationError;
