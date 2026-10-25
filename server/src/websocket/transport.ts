@@ -1,8 +1,10 @@
 import type { Room } from "../domain/types.js";
+import type { GameManagementService } from "../game/game-management.js";
 import type { LobbyManagementService } from "../lobby/lobby-management.js";
 import type { RoomManagementService } from "../rooms/room-management.js";
 import {
   parseIncomingMessage,
+  type GameRoomView,
   type OutgoingMessage,
   type PublicRoomView,
 } from "./contracts.js";
@@ -25,6 +27,25 @@ function publicRoomView(room: Room, isHost: boolean): PublicRoomView {
     : { ...common, viewerRole: "PLAYER" };
 }
 
+function gameRoomView(room: Room): GameRoomView {
+  const currentRound = room.currentRoundId === null
+    ? undefined
+    : room.rounds.find((round) => round.id === room.currentRoundId);
+  const setter = room.currentSubjectSetterPlayerId === null
+    ? undefined
+    : room.players.find((player) => player.id === room.currentSubjectSetterPlayerId);
+  return {
+    roomCode: room.code,
+    revealMode: room.revealMode,
+    phase: room.phase,
+    hostNickname: room.host.nickname,
+    playerCount: room.players.length,
+    currentRoundNumber: currentRound?.number ?? 0,
+    currentSubjectSetterNickname: setter?.nickname ?? null,
+    subject: currentRound?.subject ?? null,
+  };
+}
+
 function safeError(code: string, message: string, requestId?: string): OutgoingMessage {
   return {
     type: "ERROR",
@@ -41,6 +62,7 @@ export class WebSocketTransport {
     private readonly roomManagement: RoomManagementService,
     generateConnectionId: () => string,
     private readonly lobbyManagement?: LobbyManagementService,
+    private readonly gameManagement?: GameManagementService,
   ) {
     this.sessions = new ConnectionSessions(generateConnectionId);
   }
@@ -81,6 +103,14 @@ export class WebSocketTransport {
 
       if (parsed.message.type === "REORDER_PLAYERS") {
         this.handleReorder(socket, session, parsed.message.requestId, parsed.message.playerIds);
+        return;
+      }
+      if (parsed.message.type === "START_GAME") {
+        this.handleStartGame(socket, session, parsed.message.requestId);
+        return;
+      }
+      if (parsed.message.type === "SET_SUBJECT") {
+        this.handleSetSubject(socket, session, parsed.message.requestId, parsed.message.subject);
         return;
       }
 
