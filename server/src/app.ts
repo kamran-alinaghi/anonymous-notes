@@ -5,6 +5,7 @@ import websocket from "@fastify/websocket";
 import { LobbyManagementService } from "./lobby/lobby-management.js";
 import { GameManagementService } from "./game/game-management.js";
 import { RoundLifecycleService } from "./game/round-lifecycle.js";
+import { ConnectionLifecycleService } from "./game/connection-lifecycle.js";
 import { NoteSubmissionService } from "./notes/note-submission.js";
 import { RevealSessionService } from "./reveal/reveal-session.js";
 import { InMemoryRoomStore } from "./rooms/room-store.js";
@@ -20,7 +21,9 @@ export interface AppOptions {
   roundLifecycle?: RoundLifecycleService;
   noteSubmission?: NoteSubmissionService;
   revealSession?: RevealSessionService;
+  connectionLifecycle?: ConnectionLifecycleService;
   generateConnectionId?: () => string;
+  generateSessionToken?: () => string;
 }
 
 export async function buildApp(options: AppOptions = {}) {
@@ -32,6 +35,7 @@ export async function buildApp(options: AppOptions = {}) {
   const roundLifecycle = options.roundLifecycle ?? new RoundLifecycleService(store);
   const noteSubmission = options.noteSubmission ?? new NoteSubmissionService(store);
   const revealSession = options.revealSession ?? new RevealSessionService(store);
+  const connectionLifecycle = options.connectionLifecycle ?? new ConnectionLifecycleService(store);
   const transport = new WebSocketTransport(
     roomManagement,
     options.generateConnectionId ?? randomUUID,
@@ -40,6 +44,8 @@ export async function buildApp(options: AppOptions = {}) {
     noteSubmission,
     revealSession,
     roundLifecycle,
+    connectionLifecycle,
+    options.generateSessionToken,
   );
 
   await app.register(websocket);
