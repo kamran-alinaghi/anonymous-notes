@@ -85,6 +85,7 @@ export class GameManagementService {
         rounds: [initialRound],
         currentRoundId: roundId,
         currentSubjectSetterPlayerId: firstPlayer.id,
+        pausedPhase: (current.disconnectedPlayerIds?.length ?? 0) > 0 ? "CHOOSING_SUBJECT" : null,
       };
       const transitioned = transitionRoom(proposed, "CHOOSING_SUBJECT");
       if (!transitioned.ok) {
@@ -117,6 +118,7 @@ export class GameManagementService {
           rounds: [round],
           currentRoundId: round.id,
           currentSubjectSetterPlayerId: first.id,
+          pausedPhase: (room.disconnectedPlayerIds?.length ?? 0) > 0 ? "CHOOSING_SUBJECT" : null,
         };
         const result = transitionRoom(next, "CHOOSING_SUBJECT");
         if (!result.ok) {
@@ -149,6 +151,9 @@ export class GameManagementService {
     if (current.phase !== "CHOOSING_SUBJECT") {
       return failure("ROOM_UNAVAILABLE", "A subject can only be submitted during CHOOSING_SUBJECT.");
     }
+    if (current.pausedPhase && (current.disconnectedPlayerIds?.length ?? 0) > 0) {
+      return failure("ROOM_UNAVAILABLE", "The game is paused until every disconnected player reconnects.");
+    }
     if (current.currentSubjectSetterPlayerId !== authenticatedPlayerId) {
       return failure("NOT_SUBJECT_SETTER", "Only the current subject setter may submit the subject.");
     }
@@ -161,6 +166,10 @@ export class GameManagementService {
       const updated = this.store.updateIfPresent(roomCode, (room) => {
         if (room.phase !== "CHOOSING_SUBJECT") {
           operationError = failure("ROOM_UNAVAILABLE", "A subject can only be submitted during CHOOSING_SUBJECT.");
+          return undefined;
+        }
+        if (room.pausedPhase && (room.disconnectedPlayerIds?.length ?? 0) > 0) {
+          operationError = failure("ROOM_UNAVAILABLE", "The game is paused until every disconnected player reconnects.");
           return undefined;
         }
         if (room.currentSubjectSetterPlayerId !== authenticatedPlayerId) {
@@ -177,7 +186,7 @@ export class GameManagementService {
           operationError = failure("SUBJECT_SUBMISSION_FAILED", transitioned.errors.join(" "));
           return undefined;
         }
-        return transitioned.value;
+        return { ...transitioned.value, pausedPhase: null } as Room;
       });
       if (!updated) {
         if (operationError) return operationError;
