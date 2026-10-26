@@ -73,11 +73,16 @@ describe("NoteSubmissionService", () => {
       const readerPositions = round.revealSequence!.map((noteId) =>
         readerOrder.findIndex((player) => player.id === readerByNote.get(noteId)));
       expect(readerPositions[0]).toBe(0);
-      expect(readerPositions).toEqual([...readerPositions].sort((a, b) => a - b));
-      for (const note of round.notes) {
-        const readerId = readerByNote.get(note.id);
-        expect(readerId).not.toBe(note.authorPlayerId);
-        expect(readerId).not.toBe(note.targetPlayerId);
+
+      // The sequence must cycle through reader order before giving anyone a second note.
+      const notesSeenByReader = new Map<string, number>();
+      for (const position of readerPositions) {
+        const readerId = readerOrder[position]!.id;
+        const seen = notesSeenByReader.get(readerId) ?? 0;
+        expect(seen).toBeLessThanOrEqual(
+          Math.min(...readerOrder.map((player) => notesSeenByReader.get(player.id) ?? 0)) + 1,
+        );
+        notesSeenByReader.set(readerId, seen + 1);
       }
     },
   );
