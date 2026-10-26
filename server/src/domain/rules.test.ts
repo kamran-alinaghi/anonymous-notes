@@ -241,7 +241,7 @@ describe("reveal sequence and privacy", () => {
       { id: "p3", nickname: "Casey" },
       { id: "p4", nickname: "Drew" },
       { id: "p1", nickname: "Alex" },
-    ])).toEqual(["n1", "n4", "n3", "n2"]);
+    ])).toEqual(["n1", "n3", "n2", "n4"]);
   });
 
   it("projects notes without author or target fields", () => {
@@ -253,8 +253,8 @@ describe("reveal sequence and privacy", () => {
 });
 
 describe("reader assignment", () => {
-  it("never assigns a note to its author or target and balances eligible readers", () => {
-    const manyNotes: Note[] = Array.from({ length: 12 }, (_, index) => ({
+  it("assigns every note exactly once and distributes notes as evenly as possible", () => {
+    const manyNotes: Note[] = Array.from({ length: 14 }, (_, index) => ({
       kind: "INTERNAL_NOTE",
       id: `note-${index}`,
       authorPlayerId: players[index % 4]!.id,
@@ -264,18 +264,22 @@ describe("reader assignment", () => {
     const result = assignReaders(manyNotes, players);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
+
+    expect(result.value).toHaveLength(manyNotes.length);
+    expect(new Set(result.value.map((assignment) => assignment.noteId)).size).toBe(manyNotes.length);
+    expect(new Set(result.value.map((assignment) => assignment.noteId))).toEqual(
+      new Set(manyNotes.map((note) => note.id)),
+    );
+
     const counts = new Map<string, number>();
     for (const assignment of result.value) {
-      const note = manyNotes.find((item) => item.id === assignment.noteId)!;
-      expect(assignment.readerPlayerId).not.toBe(note.authorPlayerId);
-      expect(assignment.readerPlayerId).not.toBe(note.targetPlayerId);
       counts.set(assignment.readerPlayerId, (counts.get(assignment.readerPlayerId) ?? 0) + 1);
     }
-    expect(result.value).toHaveLength(manyNotes.length);
+    expect(counts.size).toBe(players.length);
     expect(Math.max(...counts.values()) - Math.min(...counts.values())).toBeLessThanOrEqual(1);
   });
 
-  it("fails when no eligible reader exists", () => {
+  it("fails when notes exist but there are no players", () => {
     const note: Note = {
       kind: "INTERNAL_NOTE",
       id: "n",
@@ -283,6 +287,6 @@ describe("reader assignment", () => {
       targetPlayerId: "p2",
       content: "x",
     };
-    expect(assignReaders([note], players.slice(0, 2)).ok).toBe(false);
+    expect(assignReaders([note], []).ok).toBe(false);
   });
 });
