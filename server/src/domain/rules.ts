@@ -307,9 +307,32 @@ export function orderRevealSequence(
   assignments: readonly Round["readerAssignments"][number][],
   readerOrder: readonly Player[],
 ): NoteId[] {
-  const readerByNoteId = new Map(assignments.map((assignment) => [assignment.noteId, assignment.readerPlayerId]));
-  return readerOrder.flatMap((reader) =>
-    notes.filter((note) => readerByNoteId.get(note.id) === reader.id).map((note) => note.id));
+  const notesByReader = new Map<string, Note[]>(
+    readerOrder.map((reader) => [reader.id, []]),
+  );
+  const noteById = new Map(notes.map((note) => [note.id, note]));
+
+  for (const assignment of assignments) {
+    const note = noteById.get(assignment.noteId);
+    const readerNotes = notesByReader.get(assignment.readerPlayerId);
+    if (note && readerNotes) readerNotes.push(note);
+  }
+
+  const maxNotesPerReader = Math.max(
+    0,
+    ...Array.from(notesByReader.values(), (readerNotes) => readerNotes.length),
+  );
+  const sequence: NoteId[] = [];
+
+  // Interleave reader queues: one note per reader per pass.
+  for (let noteIndex = 0; noteIndex < maxNotesPerReader; noteIndex += 1) {
+    for (const reader of readerOrder) {
+      const note = notesByReader.get(reader.id)?.[noteIndex];
+      if (note) sequence.push(note.id);
+    }
+  }
+
+  return sequence;
 }
 
 /** Explicit allow-list projection: internal authorship and target identity never leave the domain layer. */
