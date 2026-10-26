@@ -238,4 +238,79 @@ describe("GamePhaseScreen", () => {
     await user.click(screen.getByRole("button", { name: /next note/i }));
     expect(onNavigateReveal).toHaveBeenCalledWith("NEXT");
   });
+  it("lets the host complete a reveal after the final note", async () => {
+    const user = userEvent.setup();
+    const onCompleteRound = vi.fn().mockResolvedValue(undefined);
+    render(
+      <GamePhaseScreen
+        room={{ ...room, phase: "REVEALING" }}
+        nickname="Player 1"
+        viewerRole="HOST"
+        progress={null}
+        revealState={{
+          roomCode: "ABCDEF",
+          revealMode: "INDIVIDUAL_DEVICES",
+          phase: "REVEALING",
+          position: 2,
+          total: 3,
+          displayNote: { content: "Final note" },
+        }}
+        busy={false}
+        onSetSubject={vi.fn()}
+        onSubmitBatch={vi.fn()}
+        onNavigateReveal={vi.fn().mockResolvedValue(undefined)}
+        onCompleteRound={onCompleteRound}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /complete round/i }));
+    expect(onCompleteRound).toHaveBeenCalledOnce();
+  });
+
+  it("shows round lifecycle actions only to the host", async () => {
+    const user = userEvent.setup();
+    const onStartNextRound = vi.fn().mockResolvedValue(undefined);
+    const onFinishGame = vi.fn().mockResolvedValue(undefined);
+    const completeRoom: GameRoomView = { ...room, phase: "ROUND_COMPLETE" };
+    const { rerender } = render(
+      <GamePhaseScreen
+        room={completeRoom}
+        nickname="Player 1"
+        viewerRole="HOST"
+        progress={null}
+        revealState={null}
+        busy={false}
+        onSetSubject={vi.fn()}
+        onSubmitBatch={vi.fn()}
+        onNavigateReveal={vi.fn()}
+        onStartNextRound={onStartNextRound}
+        onFinishGame={onFinishGame}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /start next round/i }));
+    await user.click(screen.getByRole("button", { name: /end game/i }));
+    expect(onStartNextRound).toHaveBeenCalledOnce();
+    expect(onFinishGame).toHaveBeenCalledOnce();
+
+    rerender(
+      <GamePhaseScreen
+        room={completeRoom}
+        nickname="Player 2"
+        viewerRole="PLAYER"
+        progress={null}
+        revealState={null}
+        busy={false}
+        onSetSubject={vi.fn()}
+        onSubmitBatch={vi.fn()}
+        onNavigateReveal={vi.fn()}
+        onStartNextRound={onStartNextRound}
+        onFinishGame={onFinishGame}
+      />,
+    );
+    expect(screen.getByText(/waiting for the host to continue/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start next round/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /end game/i })).not.toBeInTheDocument();
+  });
+
 });
