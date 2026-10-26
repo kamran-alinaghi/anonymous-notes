@@ -262,17 +262,109 @@ export function assignReaders(
   orderedPlayers: readonly Player[],
 ): DomainResult<Round["readerAssignments"]> {
   const assignments: Round["readerAssignments"] = [];
-  const counts = new Map<PlayerId, number>(orderedPlayers.map((player) => [player.id, 0]));
-  for (const note of notes) {
-    const eligible = orderedPlayers.filter((player) =>
-      player.id !== note.authorPlayerId && player.id !== note.targetPlayerId);
-    if (eligible.length === 0) return failure(`No eligible reader for note "${note.id}".`);
-    const leastCount = Math.min(...eligible.map((player) => counts.get(player.id) ?? 0));
-    const reader = eligible.find((player) => (counts.get(player.id) ?? 0) === leastCount);
-    if (!reader) return failure(`Could not choose a reader for note "${note.id}".`);
-    assignments.push({ noteId: note.id, readerPlayerId: reader.id });
-    counts.set(reader.id, (counts.get(reader.id) ?? 0) + 1);
+  const remainingNotes = [...notes];
+  const counts = new Map<PlayerId, number>(
+    orderedPlayers.map((player) => [player.id, 0]),
+  );
+
+  const totalRounds = orderedPlayers.length - 1;
+
+  for (let round = 0; round < totalRounds; round++) {
+    while (
+      remainingNotes.length > 0 &&
+      !orderedPlayers.every(
+        (player) => (counts.get(player.id) ?? 0) >= round + 1,
+      )
+    ) {
+      let assigned = false;
+
+      for (let noteIndex = 0; noteIndex < remainingNotes.length; noteIndex++) {
+        const note = remainingNotes[noteIndex];
+
+        if (!note) continue;
+
+        for (const player of orderedPlayers) {
+          if (
+            player.id === note.authorPlayerId ||
+            player.id === note.targetPlayerId
+          ) {
+            continue;
+          }
+
+          const count = counts.get(player.id) ?? 0;
+
+          if (count > round) continue;
+
+          assignments.push({
+            noteId: note.id,
+            readerPlayerId: player.id,
+          });
+
+          counts.set(player.id, count + 1);
+          remainingNotes.splice(noteIndex, 1);
+          assigned = true;
+          break;
+        }
+
+        if (assigned) break;
+      }
+
+      if (!assigned) {
+        const note = remainingNotes[0];
+
+        if (!note) break;
+
+        const reader = orderedPlayers.find(
+          (player) =>
+            (counts.get(player.id) ?? 0) <= round,
+        ) ?? orderedPlayers[0];
+
+        if (!reader) {
+          return failure("Cannot assign remaining notes: no players available.");
+        }
+
+        assignments.push({
+          noteId: note.id,
+          readerPlayerId: reader.id,
+        });
+
+        counts.set(
+          reader.id,
+          (counts.get(reader.id) ?? 0) + 1,
+        );
+
+        remainingNotes.splice(0, 1);
+      }
+    }
   }
+
+  // Assign any notes remaining after the planned rounds.
+  while (remainingNotes.length > 0) {
+    const note = remainingNotes.shift();
+
+    if (!note) continue;
+
+    const reader = orderedPlayers.find(
+      (player) =>
+        player.id !== note.authorPlayerId &&
+        player.id !== note.targetPlayerId,
+    ) ?? orderedPlayers[0];
+
+    if (!reader) {
+      return failure("Cannot assign remaining notes: no players available.");
+    }
+
+    assignments.push({
+      noteId: note.id,
+      readerPlayerId: reader.id,
+    });
+
+    counts.set(
+      reader.id,
+      (counts.get(reader.id) ?? 0) + 1,
+    );
+  }
+
   return success(assignments);
 }
 
