@@ -74,9 +74,9 @@ function validateRevealState(room: Room): { notes: Note[]; sequence: string[]; i
         round.readerAssignments.some((assignment) => {
           const note = round.notes.find((item) => item.id === assignment.noteId);
           return !note || !room.players.some((player) =>
-            player.id === assignment.readerPlayerId &&
-            player.id !== note.authorPlayerId &&
-            player.id !== note.targetPlayerId);
+            player.id === assignment.readerPlayerId);
+            //player.id !== note.authorPlayerId &&
+            //player.id !== note.targetPlayerId);
         })) return undefined;
   }
   const index = round.revealIndex ?? 0;
