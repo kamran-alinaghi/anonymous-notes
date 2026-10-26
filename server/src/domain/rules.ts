@@ -263,6 +263,7 @@ export function assignReaders(
 ): DomainResult<Round["readerAssignments"]> {
   const assignments: Round["readerAssignments"] = [];
   const remainingNotes = [...notes];
+  let noteCount = 0;
   const counts = new Map<PlayerId, number>(
     orderedPlayers.map((player) => [player.id, 0]),
   );
@@ -271,46 +272,43 @@ export function assignReaders(
 
   for (let round = 0; round < totalRounds; round++) {
     while (
-      remainingNotes.length > 0 &&
+      remainingNotes.length > noteCount &&
       !orderedPlayers.every(
         (player) => (counts.get(player.id) ?? 0) >= round + 1,
       )
     ) {
       let assigned = false;
 
-      for (let noteIndex = 0; noteIndex < remainingNotes.length; noteIndex++) {
-        const note = remainingNotes[noteIndex];
 
-        if (!note) continue;
+      const note = remainingNotes[noteCount];
 
-        for (const player of orderedPlayers) {
-          if (
-            player.id === note.authorPlayerId ||
-            player.id === note.targetPlayerId
-          ) {
-            continue;
-          }
+      if (!note) continue;
 
-          const count = counts.get(player.id) ?? 0;
-
-          if (count > round) continue;
-
-          assignments.push({
-            noteId: note.id,
-            readerPlayerId: player.id,
-          });
-
-          counts.set(player.id, count + 1);
-          remainingNotes.splice(noteIndex, 1);
-          assigned = true;
-          break;
+      for (const player of orderedPlayers) {
+        if (
+          player.id === note.authorPlayerId ||
+          player.id === note.targetPlayerId
+        ) {
+          continue;
         }
 
-        if (assigned) break;
+        const count = counts.get(player.id) ?? 0;
+
+        if (count > round) continue;
+
+        assignments.push({
+          noteId: note.id,
+          readerPlayerId: player.id,
+        });
+
+        counts.set(player.id, count + 1);
+        noteCount = noteCount + 1;
+        assigned = true;
+        break;
       }
 
       if (!assigned) {
-        const note = remainingNotes[0];
+        const note = remainingNotes[noteCount];
 
         if (!note) break;
 
