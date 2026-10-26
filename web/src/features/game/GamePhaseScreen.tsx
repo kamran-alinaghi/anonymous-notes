@@ -12,6 +12,9 @@ interface GamePhaseScreenProps {
   onSetSubject: (subject: string) => Promise<void>;
   onSubmitBatch: (notes: Array<{ targetPlayerId: string; content: string }>) => Promise<void>;
   onNavigateReveal: (action: RevealNavigationAction) => Promise<void>;
+  onCompleteRound?: () => Promise<void>;
+  onStartNextRound?: () => Promise<void>;
+  onFinishGame?: () => Promise<void>;
 }
 
 export function GamePhaseScreen({
@@ -24,6 +27,9 @@ export function GamePhaseScreen({
   onSetSubject,
   onSubmitBatch,
   onNavigateReveal,
+  onCompleteRound,
+  onStartNextRound,
+  onFinishGame,
 }: GamePhaseScreenProps) {
   const [subject, setSubject] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -221,6 +227,11 @@ export function GamePhaseScreen({
               >
                 Next note →
               </button>
+              {viewerRole === "HOST" && revealState && revealState.total > 0 && revealState.position === revealState.total - 1 && onCompleteRound && (
+                <button className="primary-button" type="button" disabled={busy} onClick={() => void onCompleteRound()}>
+                  {busy ? "Completing round…" : "Complete round"}
+                </button>
+              )}
             </div>
           )}
         </>
@@ -236,6 +247,12 @@ export function GamePhaseScreen({
                 : "The game is waiting for the next phase."}
           </p>
           <div className="room-code-card"><span>ROOM CODE</span><strong>{room.roomCode}</strong></div>
+          {room.phase === "ROUND_COMPLETE" && viewerRole === "HOST" && (
+            <div className="action-stack round-lifecycle-actions">
+              {onStartNextRound && <button className="primary-button" type="button" disabled={busy} onClick={() => void onStartNextRound()}>{busy ? "Please wait…" : "Start next round"}</button>}
+              {onFinishGame && <button className="secondary-button" type="button" disabled={busy} onClick={() => void onFinishGame()}>End game</button>}
+            </div>
+          )}
         </>
       )}
 
