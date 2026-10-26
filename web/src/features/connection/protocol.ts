@@ -35,6 +35,10 @@ export interface StartGamePayload {
   type: "START_GAME";
 }
 
+export interface CompleteRoundPayload { type: "COMPLETE_ROUND"; }
+export interface StartNextRoundPayload { type: "START_NEXT_ROUND"; }
+export interface FinishGamePayload { type: "FINISH_GAME"; }
+
 export interface ReorderPlayersPayload {
   type: "REORDER_PLAYERS";
   playerIds: string[];
@@ -55,6 +59,9 @@ export type RequestPayload =
   | JoinRoomPayload
   | GetRevealStatePayload
   | StartGamePayload
+  | CompleteRoundPayload
+  | StartNextRoundPayload
+  | FinishGamePayload
   | ReorderPlayersPayload
   | SetSubjectPayload
   | SubmitNoteBatchPayload
