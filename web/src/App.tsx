@@ -361,6 +361,42 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
     }
   };
 
+  const completeRound = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await client.request({ type: "COMPLETE_ROUND" });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not complete the round.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startNextRound = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await client.request({ type: "START_NEXT_ROUND" });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not start the next round.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const finishGame = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await client.request({ type: "FINISH_GAME" });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not end the game.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const goHome = () => {
     setScreen("home");
     setError(null);
@@ -504,6 +540,9 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
             onSetSubject={setSubject}
             onSubmitBatch={submitNoteBatch}
             onNavigateReveal={navigateReveal}
+            onCompleteRound={completeRound}
+            onStartNextRound={startNextRound}
+            onFinishGame={finishGame}
           />
         )}
 
