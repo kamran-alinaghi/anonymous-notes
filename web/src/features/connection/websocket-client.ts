@@ -74,6 +74,8 @@ export class WebSocketClient {
   private readonly pending = new Map<string, PendingRequest>();
   private socket: WebSocketLike | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private sessionRestoreRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private sessionRestoreConflictRetries = 0;
   private intentionalClose = false;
   private ready = false;
   private reconnectAttempt = 0;
@@ -123,6 +125,7 @@ export class WebSocketClient {
     this.intentionalClose = true;
     this.ready = false;
     this.clearRetryTimer();
+    this.clearSessionRestoreRetryTimer();
     this.rejectPending(new Error("WebSocket connection closed by the client."));
     const socket = this.socket;
     this.socket = null;
@@ -186,6 +189,7 @@ export class WebSocketClient {
       if (this.socket !== socket) return;
       this.socket = null;
       this.ready = false;
+      this.clearSessionRestoreRetryTimer();
       this.rejectPending(new Error("WebSocket connection was interrupted."));
       if (!this.intentionalClose) this.scheduleReconnect("Connection lost.");
     };
@@ -244,6 +248,8 @@ export class WebSocketClient {
       const restored = message as SessionRestoredMessage;
       this.tokenStorage.write(restored.sessionToken);
       this.awaitingReconnectRequestId = null;
+      this.sessionRestoreConflictRetries = 0;
+      this.clearSessionRestoreRetryTimer();
       this.ready = true;
       this.reconnectAttempt = 0;
       this.updateState({ status: "connected", sessionStatus: "restored", reconnectAttempt: 0, lastError: null });
@@ -271,8 +277,19 @@ export class WebSocketClient {
         ? this.pending.get(errorMessage.requestId)
         : undefined;
       if (pending?.type === "RECONNECT" || errorMessage.requestId === this.awaitingReconnectRequestId) {
+        if (errorMessage.error.code === "SESSION_ALREADY_CONNECTED") {
+          // A page refresh can race the close event for the old WebSocket.
+          // Keep the credential and retry instead of incorrectly expiring it.
+          const token = this.tokenStorage.read();
+          this.awaitingReconnectRequestId = null;
+          if (token) {
+            this.scheduleSessionRestoreRetry(token);
+            return;
+          }
+        }
         this.tokenStorage.clear();
         this.awaitingReconnectRequestId = null;
+        this.clearSessionRestoreRetryTimer();
         this.ready = true;
         this.updateState({
           status: "session-expired",
@@ -298,6 +315,47 @@ export class WebSocketClient {
 
     this.options.onMessage?.(message);
     for (const listener of this.listeners) listener(message);
+  }
+
+  private scheduleSessionRestoreRetry(token: string): void {
+    this.clearSessionRestoreRetryTimer();
+    if (this.sessionRestoreConflictRetries >= 5) {
+      // Keep the credential so a manual refresh can retry restoration.
+      this.ready = true;
+      this.updateState({
+        status: "session-expired",
+        sessionStatus: "restoring",
+        lastError: "Your previous connection is still closing. Refresh the page to try restoring again.",
+      });
+      return;
+    }
+
+    const delay = Math.min(250 * 2 ** this.sessionRestoreConflictRetries, 2_000);
+    this.sessionRestoreConflictRetries += 1;
+    this.ready = false;
+    this.updateState({
+      status: "reconnecting",
+      sessionStatus: "restoring",
+      lastError: "Restoring your previous session…",
+    });
+    this.sessionRestoreRetryTimer = this.setTimer(() => {
+      this.sessionRestoreRetryTimer = null;
+      if (!this.socket || this.socket.readyState !== OPEN) return;
+      const requestId = this.createRequestId();
+      this.awaitingReconnectRequestId = requestId;
+      try {
+        this.socket.send(JSON.stringify({ type: "RECONNECT", requestId, sessionToken: token }));
+      } catch {
+        this.scheduleSessionRestoreRetry(token);
+      }
+    }, delay);
+  }
+
+  private clearSessionRestoreRetryTimer(): void {
+    if (this.sessionRestoreRetryTimer !== null) {
+      this.clearTimer(this.sessionRestoreRetryTimer);
+      this.sessionRestoreRetryTimer = null;
+    }
   }
 
   private scheduleReconnect(reason: string): void {
