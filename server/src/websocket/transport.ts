@@ -414,8 +414,8 @@ export class WebSocketTransport {
       return;
     }
     const key = this.identityKey(identity);
-    if (!key || this.activeByIdentity.has(key)) {
-      this.trySend(socket, safeError("SESSION_ALREADY_CONNECTED", "This identity already has an active connection.", requestId));
+    if (!key) {
+      this.trySend(socket, safeError("STALE_SESSION", "The room or player identity no longer exists.", requestId));
       return;
     }
     const lifecycleState = identity.roomCode ? this.connectionLifecycle?.getState(identity.roomCode) : undefined;
@@ -429,6 +429,22 @@ export class WebSocketTransport {
       return;
     }
     if (!lifecycleState || !lifecycleState.ok) return;
+
+    // A refresh can open the replacement socket before the browser's old socket
+    // has finished closing. Possession of the current session token authorizes
+    // taking over that identity; the stale socket must not mark the player
+    // disconnected when its delayed close event arrives.
+    const active = this.activeByIdentity.get(key);
+    if (active) {
+      this.activeByIdentity.delete(key);
+      this.sessions.unregister(active.socket);
+      this.messageWindows.delete(active.session.connectionId);
+      try {
+        active.socket.close?.(4001, "Session restored on a replacement connection");
+      } catch {
+        // The old socket may already be closing; continue restoring the session.
+      }
+    }
 
     this.reconnectCredentials.delete(presentedToken);
     if (this.credentialByIdentity.get(key) === presentedToken) this.credentialByIdentity.delete(key);
