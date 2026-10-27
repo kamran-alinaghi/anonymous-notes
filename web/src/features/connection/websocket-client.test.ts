@@ -172,6 +172,35 @@ describe("WebSocketClient", () => {
     expect(tokenStorage.read()).toBe("rotated-token");
   });
 
+  it("retries a transient active-connection conflict without discarding the session token", () => {
+    vi.useFakeTimers();
+    const { client, sockets, tokenStorage } = setup("valid-session-token");
+    client.connect();
+    const socket = sockets[0]!;
+    handshake(socket);
+    const firstReconnect = JSON.parse(socket.sent[0]!) as { requestId: string };
+
+    socket.receive({
+      type: "ERROR",
+      requestId: firstReconnect.requestId,
+      error: { code: "SESSION_ALREADY_CONNECTED", message: "The old connection is still closing." },
+    });
+
+    expect(tokenStorage.read()).toBe("valid-session-token");
+    expect(client.state.status).toBe("reconnecting");
+    expect(client.state.sessionStatus).toBe("restoring");
+    expect(socket.sent).toHaveLength(1);
+
+    vi.advanceTimersByTime(250);
+
+    expect(socket.sent).toHaveLength(2);
+    expect(JSON.parse(socket.sent[1]!)).toMatchObject({
+      type: "RECONNECT",
+      sessionToken: "valid-session-token",
+    });
+    expect((JSON.parse(socket.sent[1]!) as { requestId: string }).requestId).not.toBe(firstReconnect.requestId);
+  });
+
   it("clears an invalid reconnect token without creating a new identity", () => {
     const { client, sockets, tokenStorage } = setup("expired-token");
     client.connect();
