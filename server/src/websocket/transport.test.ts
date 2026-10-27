@@ -637,6 +637,67 @@ describe("WebSocket transport integration", () => {
     });
   });
 
+  it("restores a returning player after the game has started", async () => {
+    const { peer } = await setup();
+    const host = peer();
+    const players = [peer(), peer(), peer()];
+    await Promise.all([host, ...players].map(connected));
+
+    host.send({
+      type: "CREATE_ROOM",
+      requestId: "create-started-room",
+      revealMode: "INDIVIDUAL_DEVICES",
+      hostNickname: "Host",
+    });
+    expect((await host.nextMessage()).type).toBe("ROOM_CREATED");
+
+    const members = [host];
+    let returningPlayerToken: unknown;
+    for (let index = 0; index < players.length; index += 1) {
+      const player = players[index]!;
+      player.send({
+        type: "JOIN_ROOM",
+        requestId: "join-started-" + index,
+        roomCode: "AAAAAA",
+        nickname: "Player" + index,
+      });
+      const joined = await player.nextMessage();
+      expect(joined.type).toBe("ROOM_JOINED");
+      if (index === 0) returningPlayerToken = joined.sessionToken;
+      expect((await player.nextMessage()).type).toBe("LOBBY_UPDATED");
+      await Promise.all(members.map(async (member) => {
+        expect((await member.nextMessage()).type).toBe("LOBBY_UPDATED");
+      }));
+      members.push(player);
+    }
+
+    host.send({ type: "START_GAME", requestId: "start-before-refresh" });
+    expect((await host.nextMessage()).type).toBe("GAME_STARTED");
+    await Promise.all(members.map(async (member) => {
+      expect((await member.nextMessage()).type).toBe("GAME_STATE_UPDATED");
+    }));
+
+    const replacement = peer();
+    await connected(replacement);
+    replacement.send({
+      type: "RECONNECT",
+      requestId: "restore-started-player",
+      sessionToken: returningPlayerToken,
+    });
+
+    expect(await replacement.nextMessage()).toMatchObject({
+      type: "SESSION_RESTORED",
+      requestId: "restore-started-player",
+      sessionRole: "PLAYER",
+      nickname: "Player0",
+      room: { roomCode: "AAAAAA", phase: "CHOOSING_SUBJECT" },
+    });
+    expect(await replacement.nextMessage()).toMatchObject({
+      type: "GAME_STATE_UPDATED",
+      room: { roomCode: "AAAAAA", phase: "CHOOSING_SUBJECT" },
+    });
+  });
+
   it("unregisters a disconnected connection without removing room membership", async () => {
     const { peer } = await setup();
     const client = peer();
