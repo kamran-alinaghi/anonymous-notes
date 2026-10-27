@@ -267,6 +267,8 @@ export class WebSocketClient {
       const token = message.sessionToken;
       if (typeof token === "string" && token.length > 0) {
         this.tokenStorage.write(token);
+        this.sessionRestoreConflictRetries = 0;
+        this.clearSessionRestoreRetryTimer();
         this.updateState({ status: "connected", sessionStatus: "restored", lastError: null });
       }
     }
