@@ -601,6 +601,42 @@ describe("WebSocket transport integration", () => {
     }));
   });
 
+  it("restores a session when the replacement socket arrives before the old socket closes", async () => {
+    const { peer } = await setup();
+    const original = peer();
+    await connected(original);
+    original.send({
+      type: "CREATE_ROOM",
+      requestId: "create-before-refresh",
+      revealMode: "SINGLE_DEVICE",
+      hostNickname: "Host",
+    });
+    const created = await original.nextMessage();
+    expect(created).toMatchObject({ type: "ROOM_CREATED", room: { roomCode: "AAAAAA" } });
+    const token = created.sessionToken;
+    expect(token).toBeTypeOf("string");
+
+    const replacement = peer();
+    await connected(replacement);
+    replacement.send({
+      type: "RECONNECT",
+      requestId: "restore-after-refresh",
+      sessionToken: token,
+    });
+
+    expect(await replacement.nextMessage()).toMatchObject({
+      type: "SESSION_RESTORED",
+      requestId: "restore-after-refresh",
+      sessionRole: "HOST",
+      nickname: "Host",
+      room: { roomCode: "AAAAAA", phase: "LOBBY" },
+    });
+    expect(await replacement.nextMessage()).toMatchObject({
+      type: "LOBBY_UPDATED",
+      room: { roomCode: "AAAAAA", viewerRole: "HOST" },
+    });
+  });
+
   it("unregisters a disconnected connection without removing room membership", async () => {
     const { peer } = await setup();
     const client = peer();
