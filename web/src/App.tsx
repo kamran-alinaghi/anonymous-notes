@@ -432,7 +432,16 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
       </header>
 
       <section className="welcome-panel interactive-panel" aria-labelledby="app-title">
-        {screen === "home" && (
+        {connection.sessionStatus === "restoring" &&
+          (connection.status === "connecting" || connection.status === "reconnecting") && (
+          <>
+            <p className="eyebrow">WELCOME BACK</p>
+            <h1 id="app-title">Restoring <span>your session.</span></h1>
+            <p className="welcome-copy">Reconnecting to your room and restoring the current game. Please wait…</p>
+          </>
+        )}
+
+        {screen === "home" && connection.sessionStatus !== "restoring" && (
           <>
             <p className="eyebrow">A SOCIAL GAME OF SECRETS</p>
             <h1 id="app-title">Anonymous <span>Note.</span></h1>
