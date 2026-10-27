@@ -326,7 +326,7 @@ export class WebSocketClient {
       this.ready = true;
       this.updateState({
         status: "session-expired",
-        sessionStatus: "restoring",
+        sessionStatus: "expired",
         lastError: "Your previous connection is still closing. Refresh the page to try restoring again.",
       });
       return;
