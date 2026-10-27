@@ -430,20 +430,21 @@ export class WebSocketTransport {
     }
     if (!lifecycleState || !lifecycleState.ok) return;
 
-    // A refresh can open the replacement socket before the browser's old socket
-    // has finished closing. Possession of the current session token authorizes
-    // taking over that identity; the stale socket must not mark the player
-    // disconnected when its delayed close event arrives.
+    // Never let a second live connection take over an active identity just
+    // because it presents a bearer token. During a legitimate refresh, the old
+    // WebSocket will be closing/closed; the client retries if its close event
+    // has not reached the server yet.
     const active = this.activeByIdentity.get(key);
     if (active) {
+      const readyState = (active.socket as SessionConnection & { readyState?: number }).readyState;
+      const oldSocketIsClosing = readyState === 2 || readyState === 3;
+      if (!oldSocketIsClosing) {
+        this.trySend(socket, safeError("SESSION_ALREADY_CONNECTED", "This identity already has an active connection.", requestId));
+        return;
+      }
       this.activeByIdentity.delete(key);
       this.sessions.unregister(active.socket);
       this.messageWindows.delete(active.session.connectionId);
-      try {
-        active.socket.close?.(4001, "Session restored on a replacement connection");
-      } catch {
-        // The old socket may already be closing; continue restoring the session.
-      }
     }
 
     this.reconnectCredentials.delete(presentedToken);
