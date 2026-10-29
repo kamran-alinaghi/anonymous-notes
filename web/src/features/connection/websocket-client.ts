@@ -321,7 +321,7 @@ export class WebSocketClient {
 
   private scheduleSessionRestoreRetry(token: string): void {
     this.clearSessionRestoreRetryTimer();
-    if (this.sessionRestoreConflictRetries >= 5) {
+    if (this.sessionRestoreConflictRetries >= 20) {
       // Keep the credential so a manual refresh can retry restoration.
       this.ready = true;
       this.updateState({
