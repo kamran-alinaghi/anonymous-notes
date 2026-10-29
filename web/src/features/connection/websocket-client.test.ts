@@ -201,6 +201,53 @@ describe("WebSocketClient", () => {
     expect((JSON.parse(socket.sent[1]!) as { requestId: string }).requestId).not.toBe(firstReconnect.requestId);
   });
 
+  it("keeps restoring through delayed old-socket shutdown and succeeds without a second page refresh", () => {
+    vi.useFakeTimers();
+    const { client, sockets, tokenStorage } = setup("valid-session-token");
+    client.connect();
+    const socket = sockets[0]!;
+    handshake(socket);
+
+    const retryDelays = [250, 500, 1_000, 2_000, 2_000, 2_000];
+    for (const delay of retryDelays) {
+      const reconnect = JSON.parse(socket.sent[socket.sent.length - 1]!) as { requestId: string };
+      socket.receive({
+        type: "ERROR",
+        requestId: reconnect.requestId,
+        error: { code: "SESSION_ALREADY_CONNECTED", message: "The old connection is still closing." },
+      });
+      vi.advanceTimersByTime(delay);
+    }
+
+    expect(socket.sent).toHaveLength(retryDelays.length + 1);
+    expect(client.state.sessionStatus).toBe("restoring");
+    expect(tokenStorage.read()).toBe("valid-session-token");
+
+    const latestReconnect = JSON.parse(socket.sent[socket.sent.length - 1]!) as { requestId: string };
+    socket.receive({
+      type: "SESSION_RESTORED",
+      requestId: latestReconnect.requestId,
+      sessionRole: "PLAYER",
+      nickname: "Player",
+      sessionToken: "rotated-session-token",
+      room: {
+        roomCode: "ABCDEF",
+        revealMode: "INDIVIDUAL_DEVICES",
+        phase: "WRITING",
+        hostNickname: "Host",
+        playerCount: 2,
+        players: [{ id: "p1", nickname: "Player" }],
+        currentRoundNumber: 1,
+        currentSubjectSetterNickname: "Host",
+        subject: "A mystery",
+      },
+    });
+
+    expect(client.state.status).toBe("connected");
+    expect(client.state.sessionStatus).toBe("restored");
+    expect(tokenStorage.read()).toBe("rotated-session-token");
+  });
+
   it("clears an invalid reconnect token without creating a new identity", () => {
     const { client, sockets, tokenStorage } = setup("expired-token");
     client.connect();
