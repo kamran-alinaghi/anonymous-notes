@@ -16,11 +16,14 @@ npm install
 npm run dev
 ```
 
-Vite prints the local development URL after startup. By default, the frontend connects to `ws://<current-hostname>:3000/ws` (or `wss://` when the page uses HTTPS). To configure a different backend URL, set `VITE_WS_URL` in a local `.env` file, for example:
+Vite prints the frontend's local development URL after startup (typically `http://127.0.0.1:5173`). The frontend and backend use different ports: Vite serves the website on port `5173`, while the local WebSocket backend runs on port `3000`.
 
-```dotenv
-VITE_WS_URL=ws://127.0.0.1:3000/ws
-```
+The checked-in environment files select the backend based on the Vite mode:
+
+- `.env.development` is used by `npm run dev` and connects to `ws://127.0.0.1:3000/ws`.
+- `.env.production` is used for production builds (including Firebase Hosting builds) and connects to `wss://anonymous-notes-server.onrender.com/ws`.
+
+If you change either endpoint, restart the Vite development server or rebuild the production frontend so the updated `VITE_WS_URL` is included. Vite environment variables prefixed with `VITE_` are exposed to the browser.
 
 Do not put session credentials or other secrets in Vite environment variables; variables prefixed with `VITE_` are exposed to the browser.
 
