@@ -89,6 +89,7 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
   }));
   const [screen, setScreen] = useState<Screen>("home");
   const [nickname, setNickname] = useState("");
+  const [nicknameDraft, setNicknameDraft] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [revealMode, setRevealMode] = useState<RevealMode>("INDIVIDUAL_DEVICES");
   const [lobby, setLobby] = useState<LobbyState | null>(null);
@@ -103,6 +104,7 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
     if (isRoomMessage(message)) {
       setLobby(lobbyFromPublicRoom(message.room, message.nickname));
       setNickname(message.nickname);
+      setNicknameDraft(message.nickname);
       setScreen("lobby");
       setError(null);
       setNotice(message.type === "ROOM_CREATED" ? "Your room is ready to share." : "You joined the room.");
@@ -120,6 +122,7 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
           playerCount: room.playerCount,
           revealMode: room.revealMode,
           players: room.players ?? current.players,
+          nickname: typeof message.nickname === "string" ? message.nickname : current.nickname,
         };
       });
       return;
@@ -128,6 +131,7 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
     if (message.type === "SESSION_RESTORED") {
       const restored = message as SessionRestoredMessage;
       setNickname(restored.nickname);
+      setNicknameDraft(restored.nickname);
       setLobby(lobbyFromRestoredRoom(restored.room, restored.sessionRole, restored.nickname));
       setGameRoom(restored.room);
       setScreen(restored.room.phase === "LOBBY" ? "lobby" : "game");
@@ -186,6 +190,15 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
       if (progress.phase === "REVEALING") {
         setGameRoom((current) => current ? { ...current, phase: "REVEALING" } : current);
       }
+      return;
+    }
+
+    if (message.type === "NICKNAME_CHANGED" && typeof message.nickname === "string") {
+      setNickname(message.nickname);
+      setNicknameDraft(message.nickname);
+      setLobby((current) => current ? { ...current, nickname: message.nickname as string } : current);
+      setNotice("Your nickname has been updated.");
+      setError(null);
       return;
     }
 
@@ -293,6 +306,25 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
       await client.request({ type: "START_GAME" });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Could not start the game.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeNickname = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const cleanNickname = nicknameDraft.trim();
+    if (!cleanNickname) {
+      setError("Enter a nickname to continue.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await client.request({ type: "CHANGE_NICKNAME", nickname: cleanNickname });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not change your nickname.");
     } finally {
       setBusy(false);
     }
@@ -513,6 +545,20 @@ export default function App({ client: suppliedClient }: { client?: WebSocketClie
               <div><span>Players</span><strong>{lobby.playerCount}</strong></div>
               <div><span>Reveal mode</span><strong>{lobby.revealMode === "SINGLE_DEVICE" ? "Single device" : "Individual devices"}</strong></div>
             </div>
+            <form className="game-form nickname-edit-form" onSubmit={(event) => void changeNickname(event)}>
+              <label htmlFor="lobby-nickname">Your nickname</label>
+              <input
+                id="lobby-nickname"
+                autoComplete="nickname"
+                maxLength={40}
+                value={nicknameDraft}
+                onChange={(event) => setNicknameDraft(event.target.value)}
+                required
+              />
+              <button className="secondary-button" type="submit" disabled={busy || !client.isReady || !nicknameDraft.trim() || nicknameDraft.trim() === lobby.nickname}>
+                {busy ? "Saving…" : "Update nickname"}
+              </button>
+            </form>
             <div className="player-list">
               <div className="section-heading"><h2>Players</h2><span>{lobby.players.length} listed</span></div>
               {lobby.players.length > 0 ? lobby.players.map((player, index) => (
