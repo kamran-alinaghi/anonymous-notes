@@ -51,6 +51,15 @@ describe("WebSocket message contracts", () => {
     });
   });
 
+  it("parses nickname changes and rejects non-text nicknames", () => {
+    expect(parseIncomingMessage({ type: "CHANGE_NICKNAME", requestId: "name-1", nickname: "New Name" })).toEqual({
+      ok: true, message: { type: "CHANGE_NICKNAME", requestId: "name-1", nickname: "New Name" },
+    });
+    expect(parseIncomingMessage({ type: "CHANGE_NICKNAME", requestId: "name-2", nickname: 42 })).toMatchObject({
+      ok: false, requestId: "name-2", code: "MALFORMED_MESSAGE",
+    });
+  });
+
   it("parses host lobby reorder requests and rejects malformed order payloads", () => {
     expect(parseIncomingMessage({
       type: "REORDER_PLAYERS",
