@@ -209,7 +209,9 @@ export class RevealSessionService {
     } else if (room.revealMode === "INDIVIDUAL_DEVICES" && viewer.playerId) {
       const assignment = currentRound(room)?.readerAssignments.find((item) => item.noteId === note.id);
       if (assignment?.readerPlayerId === viewer.playerId) {
-        result.displayNote = { content: note.content };
+        const target = room.players.find((player) => player.id === note.targetPlayerId);
+        if (!target) return failure("REVEAL_NOT_READY", "The note recipient is unavailable.");
+        result.displayNote = { content: note.content, targetNickname: target.nickname };
       }
     }
 
