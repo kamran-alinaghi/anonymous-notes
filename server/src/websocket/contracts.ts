@@ -1,6 +1,6 @@
 import type { GamePhase, RevealMode } from "../domain/types.js";
 
-export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "START_GAME", "SET_SUBJECT", "SUBMIT_NOTE_BATCH", "GET_REVEAL_STATE", "NAVIGATE_REVEAL", "COMPLETE_ROUND", "FINISH_GAME", "START_NEXT_ROUND", "TERMINATE_GAME", "RECONNECT"] as const;
+export const INCOMING_MESSAGE_TYPES = ["CREATE_ROOM", "JOIN_ROOM", "REORDER_PLAYERS", "CHANGE_NICKNAME", "START_GAME", "SET_SUBJECT", "SUBMIT_NOTE_BATCH", "GET_REVEAL_STATE", "NAVIGATE_REVEAL", "COMPLETE_ROUND", "FINISH_GAME", "START_NEXT_ROUND", "TERMINATE_GAME", "RECONNECT"] as const;
 export type IncomingMessageType = (typeof INCOMING_MESSAGE_TYPES)[number];
 
 export interface ReconnectRequest { type: "RECONNECT"; requestId: string; sessionToken: string; }
@@ -18,6 +18,8 @@ export interface JoinRoomRequest {
   roomCode: string;
   nickname: string;
 }
+
+export interface ChangeNicknameRequest { type: "CHANGE_NICKNAME"; requestId: string; nickname: string; }
 
 export interface ReorderPlayersRequest {
   type: "REORDER_PLAYERS";
@@ -63,6 +65,7 @@ export type IncomingMessage =
   | CreateRoomRequest
   | JoinRoomRequest
   | ReorderPlayersRequest
+  | ChangeNicknameRequest
   | StartGameRequest
   | SetSubjectRequest
   | SubmitNoteBatchRequest
@@ -145,7 +148,8 @@ export type OutgoingMessage =
   | { type: "GAME_RESUMED"; room: GameRoomView }
   | { type: "ROOM_CREATED"; requestId: string; room: PublicRoomView; sessionRole: "HOST" | "PLAYER"; nickname: string; sessionToken: string }
   | { type: "ROOM_JOINED"; requestId: string; room: PublicRoomView; sessionRole: "PLAYER"; nickname: string; sessionToken: string }
-  | { type: "LOBBY_UPDATED"; room: PublicRoomView }
+  | { type: "LOBBY_UPDATED"; room: PublicRoomView; nickname?: string }
+  | { type: "NICKNAME_CHANGED"; requestId: string; nickname: string }
   | { type: "PLAYER_ORDER_UPDATED"; requestId: string; room: HostLobbyRoomView }
   | { type: "GAME_STARTED"; requestId: string; room: GameRoomView }
   | { type: "SUBJECT_SUBMITTED"; requestId: string; room: GameRoomView }
@@ -229,6 +233,13 @@ export function parseIncomingMessage(raw: unknown): MessageParseResult {
       roomCode: value.roomCode,
       nickname: value.nickname,
     } };
+  }
+
+  if (value.type === "CHANGE_NICKNAME") {
+    if (!isString(value.nickname, 256)) {
+      return { ok: false, requestId, code: "MALFORMED_MESSAGE", message: "CHANGE_NICKNAME requires nickname text." };
+    }
+    return { ok: true, message: { type: "CHANGE_NICKNAME", requestId, nickname: value.nickname } };
   }
 
   if (value.type === "REORDER_PLAYERS") {
