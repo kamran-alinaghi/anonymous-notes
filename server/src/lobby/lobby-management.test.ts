@@ -22,6 +22,24 @@ function setup(revealMode: "SINGLE_DEVICE" | "INDIVIDUAL_DEVICES" = "SINGLE_DEVI
 }
 
 describe("LobbyManagementService", () => {
+  it("renames an authenticated lobby member and keeps host identity synchronized", () => {
+    const { lobby, store, room, hostId } = setup("INDIVIDUAL_DEVICES");
+    const result = lobby.renameMember(room.code, hostId, "New Host");
+    expect(result).toMatchObject({ ok: true, value: { host: { nickname: "New Host" } } });
+    expect(store.getByCode(room.code)?.players.find((player) => player.id === hostId)?.nickname).toBe("New Host");
+  });
+
+  it("rejects duplicate, invalid, unauthorized, and post-lobby nickname changes", () => {
+    const { lobby, store, room } = setup();
+    const playerId = room.players[0]!.id;
+    expect(lobby.renameMember(room.code, playerId, "Beta")).toMatchObject({ ok: false, error: { code: "DUPLICATE_NICKNAME" } });
+    expect(lobby.renameMember(room.code, playerId, "   ")).toMatchObject({ ok: false, error: { code: "INVALID_NICKNAME" } });
+    expect(lobby.renameMember(room.code, "ghost", "Ghost")).toMatchObject({ ok: false, error: { code: "UNAUTHORIZED" } });
+    store.updateIfPresent(room.code, (current) => ({ ...current, phase: "WRITING" }));
+    expect(lobby.renameMember(room.code, playerId, "Changed")).toMatchObject({ ok: false, error: { code: "ROOM_UNAVAILABLE" } });
+  });
+
+
   it("reorders every actual player in SINGLE_DEVICE mode without inserting the host", () => {
     const { lobby, store, hostId, room } = setup("SINGLE_DEVICE");
     const ids = room.players.map((player) => player.id).reverse();
