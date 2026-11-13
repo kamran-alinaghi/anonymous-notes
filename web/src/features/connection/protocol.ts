@@ -39,6 +39,8 @@ export interface CompleteRoundPayload { type: "COMPLETE_ROUND"; }
 export interface StartNextRoundPayload { type: "START_NEXT_ROUND"; }
 export interface FinishGamePayload { type: "FINISH_GAME"; }
 
+export interface ChangeNicknamePayload { type: "CHANGE_NICKNAME"; nickname: string; }
+
 export interface ReorderPlayersPayload {
   type: "REORDER_PLAYERS";
   playerIds: string[];
@@ -63,6 +65,7 @@ export type RequestPayload =
   | StartNextRoundPayload
   | FinishGamePayload
   | ReorderPlayersPayload
+  | ChangeNicknamePayload
   | SetSubjectPayload
   | SubmitNoteBatchPayload
   | NavigateRevealPayload;
