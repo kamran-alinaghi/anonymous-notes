@@ -225,6 +225,10 @@ export class WebSocketTransport {
         return;
       }
 
+      if (parsed.message.type === "CHANGE_NICKNAME") {
+        this.handleChangeNickname(socket, session, parsed.message.requestId, parsed.message.nickname);
+        return;
+      }
       if (parsed.message.type === "REORDER_PLAYERS") {
         this.handleReorder(socket, session, parsed.message.requestId, parsed.message.playerIds);
         return;
@@ -582,6 +586,49 @@ export class WebSocketTransport {
     return true;
   }
 
+  private handleChangeNickname(
+    socket: SessionConnection,
+    session: ConnectionSession,
+    requestId: string,
+    nickname: string,
+  ): void {
+    if ((session.role !== "HOST" && session.role !== "PLAYER") || !session.roomCode) {
+      this.trySend(socket, safeError("UNAUTHORIZED", "An authenticated room member is required to change a nickname.", requestId));
+      return;
+    }
+    if (!this.lobbyManagement) {
+      this.trySend(socket, safeError("LOBBY_UNAVAILABLE", "Lobby management is unavailable.", requestId));
+      return;
+    }
+    const memberId = session.role === "HOST" ? session.hostId : session.playerId;
+    if (!memberId) {
+      this.trySend(socket, safeError("UNAUTHORIZED", "The authenticated member identity is unavailable.", requestId));
+      return;
+    }
+    const result = this.lobbyManagement.renameMember(session.roomCode, memberId, nickname);
+    if (!result.ok) {
+      this.trySend(socket, safeError(result.error.code, result.error.message, requestId));
+      return;
+    }
+    const room = result.value;
+    const renamed = room.host.id === memberId
+      ? room.host.nickname
+      : room.players.find((player) => player.id === memberId)?.nickname;
+    if (!renamed) {
+      this.trySend(socket, safeError("MEMBER_NOT_FOUND", "The renamed member could not be found.", requestId));
+      return;
+    }
+    session.nickname = renamed;
+    const key = this.identityKey(session);
+    const token = key ? this.credentialByIdentity.get(key) : undefined;
+    if (token) {
+      const credential = this.reconnectCredentials.get(token);
+      if (credential) this.reconnectCredentials.set(token, { ...credential, nickname: renamed });
+    }
+    this.trySend(socket, { type: "NICKNAME_CHANGED", requestId, nickname: renamed });
+    this.broadcastLobby(room);
+  }
+
   private handleReorder(
     socket: SessionConnection,
     session: ConnectionSession,
@@ -851,6 +898,7 @@ export class WebSocketTransport {
       this.trySend(socket, {
         type: "LOBBY_UPDATED",
         room: publicRoomView(room, session.role === "HOST" && session.hostId === room.host.id),
+        nickname: session.nickname ?? undefined,
       });
     }
   }
