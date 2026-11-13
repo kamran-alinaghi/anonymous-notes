@@ -146,7 +146,7 @@ describe("RevealSessionService", () => {
       role: "PLAYER", hostId: null, playerId: readerId,
     });
     expect(reader.ok).toBe(true);
-    if (reader.ok) expect(reader.value.displayNote).toEqual({ content: note.content });
+    if (reader.ok) expect(reader.value.displayNote).toEqual({ content: note.content, targetNickname: players.find((player) => player.id === note.targetPlayerId)!.nickname });
 
     const otherId = players.find((player) => player.id !== readerId)!.id;
     const other = service.getViewerState(room.code, {
