@@ -640,4 +640,36 @@ describe("WebSocket transport integration", () => {
     expect(app).toBeDefined();
     // Disconnection intentionally does not remove players or rooms.
   });
+  it("renames only the authenticated member and broadcasts the updated nickname", async () => {
+    const { peer } = await setup();
+    const host = peer();
+    const player = peer();
+    await Promise.all([connected(host), connected(player)]);
+
+    host.send({ type: "CREATE_ROOM", requestId: "rename-create", revealMode: "INDIVIDUAL_DEVICES", hostNickname: "Host" });
+    await host.nextMessage();
+    player.send({ type: "JOIN_ROOM", requestId: "rename-join", roomCode: "AAAAAA", nickname: "Player" });
+    await player.nextMessage();
+    await host.nextMessage();
+    await player.nextMessage();
+
+    player.send({ type: "CHANGE_NICKNAME", requestId: "rename-player", nickname: "New Player" });
+    expect(await player.nextMessage()).toMatchObject({
+      type: "NICKNAME_CHANGED", requestId: "rename-player", nickname: "New Player",
+    });
+    const hostUpdate = await host.nextMessage();
+    expect(hostUpdate).toMatchObject({
+      type: "LOBBY_UPDATED",
+      room: { players: [{ nickname: "Host" }, { nickname: "New Player" }] },
+    });
+    expect(await player.nextMessage()).toMatchObject({
+      type: "LOBBY_UPDATED", nickname: "New Player",
+    });
+
+    player.send({ type: "CHANGE_NICKNAME", requestId: "rename-duplicate", nickname: "Host" });
+    expect(await player.nextMessage()).toMatchObject({
+      type: "ERROR", requestId: "rename-duplicate", error: { code: "DUPLICATE_NICKNAME" },
+    });
+  });
+
 });
