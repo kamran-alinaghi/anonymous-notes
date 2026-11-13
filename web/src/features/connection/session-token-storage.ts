@@ -29,7 +29,13 @@ export function createBrowserSessionTokenStorage(): SessionTokenStorage {
     read() {
       try {
         migrateLegacyToken();
-        return getStorage().getItem(SESSION_TOKEN_KEY);
+        const token = getStorage().getItem(SESSION_TOKEN_KEY);
+        if (token) return token;
+      } catch {
+        // Fall back to tab-scoped storage when persistent storage is blocked.
+      }
+      try {
+        return window.sessionStorage.getItem(SESSION_TOKEN_KEY);
       } catch {
         return null;
       }
@@ -39,7 +45,11 @@ export function createBrowserSessionTokenStorage(): SessionTokenStorage {
         getStorage().setItem(SESSION_TOKEN_KEY, token);
         try { window.sessionStorage.removeItem(SESSION_TOKEN_KEY); } catch { /* Ignore legacy cleanup failures. */ }
       } catch {
-        // The current connection can still work if storage is unavailable.
+        try {
+          window.sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+        } catch {
+          // The current connection can still work if all browser storage is unavailable.
+        }
       }
     },
     clear() {
