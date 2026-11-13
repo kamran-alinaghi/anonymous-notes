@@ -16,9 +16,10 @@ export function createBrowserSessionTokenStorage(): SessionTokenStorage {
   const migrateLegacyToken = (): void => {
     try {
       const persistent = getStorage();
-      if (persistent.getItem(SESSION_TOKEN_KEY)) return;
-      const legacyToken = window.sessionStorage.getItem(SESSION_TOKEN_KEY);
-      if (legacyToken) persistent.setItem(SESSION_TOKEN_KEY, legacyToken);
+      if (!persistent.getItem(SESSION_TOKEN_KEY)) {
+        const legacyToken = window.sessionStorage.getItem(SESSION_TOKEN_KEY);
+        if (legacyToken) persistent.setItem(SESSION_TOKEN_KEY, legacyToken);
+      }
       window.sessionStorage.removeItem(SESSION_TOKEN_KEY);
     } catch {
       // Storage may be unavailable in privacy-restricted browser contexts.
