@@ -897,8 +897,8 @@ export class WebSocketTransport {
       if (session.roomCode !== room.code) continue;
       this.trySend(socket, {
         type: "LOBBY_UPDATED",
-        room: publicRoomView(room, session.role === "HOST" && session.hostId === room.host.id),
-        nickname: session.nickname ?? undefined,
+        room: publicRoomView(room,session.role === "HOST" && session.hostId === room.host.id),
+        nickname: (session.nickname !== undefined && session.nickname !== null)? session.nickname : "",
       });
     }
   }
